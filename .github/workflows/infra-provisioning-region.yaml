@@ -1,0 +1,236 @@
+name: Kubernetes Cluster Infrastructure Terraform Specific Region
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Select AWS Account'
+        required: true
+        type: choice
+        default: '019273956931'
+        options:
+          - '019273956931'
+      region:
+        description: 'Select AWS Region'
+        required: true
+        type: choice
+        default: 'us-east-1: N. Virginia'
+        options:
+          - 'us-east-1: N. Virginia'
+          - 'us-east-2: Ohio'
+      country:
+        required: true
+        type: string
+        default: US
+      state:
+        required: true
+        type: string
+        default: Virginia
+      locality:
+        required: true
+        type: string
+        default: Virginia Beach
+      organization:
+        required: true
+        type: string
+        default: Talo Polybot
+      common_name:
+        required: true
+        type: string
+        default: talo-polybot.int-devops.click
+      environment:
+        description: 'Select Environment'
+        required: true
+        type: choice
+        default: prod
+        options:
+          - prod
+          - dev
+
+jobs:
+  SetRegion:
+    runs-on: ubuntu-latest
+    outputs:
+      region_code: ${{ steps.set_region.outputs.region_code }}
+    steps:
+      - name: Set Region
+        id: set_region
+        run: |
+          SELECTED_REGION="${{ inputs.region }}"
+          echo "region_code=${SELECTED_REGION%%:*}" >> $GITHUB_OUTPUT
+
+  Terraform:
+    runs-on: ubuntu-latest
+    needs:
+      - SetRegion
+    outputs:
+      cp_pem_file_name: ${{ steps.tf_output.outputs.cp_pem_file_name }}
+      wn_pem_file_name: ${{ steps.tf_output.outputs.wn_pem_file_name }}
+      certificate_arn: ${{ steps.tf_output.outputs.certificate_arn }}
+      certificate_body: ${{ steps.tf_output.outputs.certificate_body }}
+      certificate_key: ${{ steps.tf_output.outputs.certificate_key }}
+      alb_sg_id: ${{ steps.tf_output.outputs.alb_sg_id }}
+      prefix: ${{ steps.tf_output.outputs.prefix }}
+      cluster_name: ${{ steps.tf_output.outputs.cluster_name }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      OUTPUTS_ARTIFACT_NAME: ${{ needs.SetRegion.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.2
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform workspace select
+        run: terraform workspace select ${{ needs.SetRegion.outputs.region_code }} || terraform workspace new ${{ needs.SetRegion.outputs.region_code }}
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: |
+          terraform plan \
+            -var-file=region.${{ needs.SetRegion.outputs.region_code }}.tfvars \
+            -var "env=${{ inputs.environment }}" \
+            -var "region=${{ needs.SetRegion.outputs.region_code }}" \
+            -var "country=${{ inputs.country }}" \
+            -var "state=${{ inputs.state }}" \
+            -var "locality=${{ inputs.locality }}" \
+            -var "organization=${{ inputs.organization }}" \
+            -var "common_name=${{ inputs.common_name }}" \
+            -out region.${{ needs.SetRegion.outputs.region_code }}.${{ inputs.environment }}.tfplan
+
+      - name: Provision infrastructure
+        run: terraform apply -auto-approve region.${{ needs.SetRegion.outputs.region_code }}.${{ inputs.environment }}.tfplan
+
+      - name: Get terraform output
+        id: tf_output
+        run: |
+          echo "CP_PEM_FILE_NAME=$(terraform output -raw cp_pem_file_name)" >> $GITHUB_ENV
+          echo "CP_PEM_FILE_PATH=$(terraform output -raw cp_pem_file_path)" >> $GITHUB_ENV
+          echo "CP_PUB_FILE_NAME=$(terraform output -raw cp_pub_file_name)" >> $GITHUB_ENV
+          echo "CP_PUB_FILE_PATH=$(terraform output -raw cp_pub_file_path)" >> $GITHUB_ENV
+          echo "cp_pem_file_name=${{ env.CP_PEM_FILE_NAME }}" >> $GITHUB_OUTPUT
+
+          echo "WN_PEM_FILE_NAME=$(terraform output -raw wn_pem_file_name)" >> $GITHUB_ENV
+          echo "WN_PEM_FILE_PATH=$(terraform output -raw wn_pem_file_path)" >> $GITHUB_ENV
+          echo "WN_PUB_FILE_NAME=$(terraform output -raw wn_pub_file_name)" >> $GITHUB_ENV
+          echo "WN_PUB_FILE_PATH=$(terraform output -raw wn_pub_file_path)" >> $GITHUB_ENV
+          echo "wn_pem_file_name=${{ env.WN_PEM_FILE_NAME }}" >> $GITHUB_OUTPUT
+
+          echo "BASTION_PEM_FILE_NAME=$(terraform output -raw bastion_pem_file_name)" >> $GITHUB_ENV
+          echo "BASTION_PEM_FILE_PATH=$(terraform output -raw bastion_pem_file_path)" >> $GITHUB_ENV
+
+          terraform output -json > ${{ github.workspace }}/${{ env.OUTPUTS_ARTIFACT_NAME }}
+
+          echo "certificate_arn=$(terraform output -raw certificate_arn)" >> $GITHUB_OUTPUT
+          echo "certificate_body=$(terraform output -raw certificate_body)" >> $GITHUB_OUTPUT
+          echo "certificate_key=$(terraform output -raw certificate_key)" >> $GITHUB_OUTPUT
+          echo "alb_sg_id=$(terraform output -raw alb_sg_id)" >> $GITHUB_OUTPUT
+          echo "prefix=$(terraform output -raw prefix)" >> $GITHUB_OUTPUT
+          echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
+
+      - name: Upload Control Plane private key as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ env.CP_PEM_FILE_NAME }}"
+          path: "${{ env.CP_PEM_FILE_PATH }}"
+          retention-days: 5
+
+      - name: Upload Control Plane public key as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ env.CP_PUB_FILE_NAME }}"
+          path: "${{ env.CP_PUB_FILE_PATH }}"
+          retention-days: 5
+
+      - name: Upload Worker Nodes private key as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ env.WN_PEM_FILE_NAME }}"
+          path: "${{ env.WN_PEM_FILE_PATH }}"
+          retention-days: 5
+
+      - name: Upload Worker Nodes public key as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ env.WN_PUB_FILE_NAME }}"
+          path: "${{ env.WN_PUB_FILE_PATH }}"
+          retention-days: 5
+
+      - name: Upload Bastion private key as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ env.BASTION_PEM_FILE_NAME }}"
+          path: "${{ env.BASTION_PEM_FILE_PATH }}"
+          retention-days: 5
+
+      - name: Upload terraform outputs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ env.OUTPUTS_ARTIFACT_NAME }}"
+          path: "${{ github.workspace }}/${{ env.OUTPUTS_ARTIFACT_NAME }}"
+          retention-days: 5
+
+  Ansible:
+    runs-on: ubuntu-latest
+    needs:
+      - SetRegion
+      - Terraform
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      LOCAL_PATH: /home/runner/.ssh
+      CP_PEM_FILE_NAME: ${{ needs.Terraform.outputs.cp_pem_file_name }}
+      WN_PEM_FILE_NAME: ${{ needs.Terraform.outputs.wn_pem_file_name }}
+    steps:
+      - name: Install Ansible and boto3
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible boto3
+          ansible-galaxy collection install community.aws
+
+      - name: Download Control Plane SSH key
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ env.CP_PEM_FILE_NAME }}"
+          path: "${{ env.LOCAL_PATH }}"
+
+      - name: Download Worker Nodes SSH key
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ env.WN_PEM_FILE_NAME }}"
+          path: "${{ env.LOCAL_PATH }}"
+
+      - name: Set permissions for SSH key and directory
+        run: |
+          chmod 400 ${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }}
+          chmod 400 ${{ env.LOCAL_PATH }}/${{ env.WN_PEM_FILE_NAME }}
+          chmod 700 ${{ env.LOCAL_PATH }}
+
+      - name: Checkout the repo code
+        uses: actions/checkout@v2
+
+      - name: Run Ansible Playbook
+        env:
+          AWS_ACCOUNT: ${{ inputs.account }}
+          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ needs.SetRegion.outputs.region_code }}
+          CERTIFICATE_ARN: ${{ needs.Terraform.outputs.certificate_arn }}
+          CERTIFICATE_BODY: ${{ needs.Terraform.outputs.certificate_body }}
+          CERTIFICATE_KEY: ${{ needs.Terraform.outputs.certificate_key }}
+          SUB_DOMAIN_NAME: ${{ inputs.common_name }}
+          ALB_SG_ID: ${{ needs.Terraform.outputs.alb_sg_id }}
+          ALB_NAME: "${{ needs.Terraform.outputs.prefix }}-${{ needs.SetRegion.outputs.region_code }}-alb-${{ inputs.environment }}"
+          ALB_TAGS: "Name=${{ needs.Terraform.outputs.prefix }}-${{ needs.SetRegion.outputs.region_code }}-alb-${{ inputs.environment }},Env=${{ inputs.environment }},Terraform=true,\"kubernetes.io/cluster/${{ needs.Terraform.outputs.cluster_name }}\"=owned"
+        working-directory: ${{ github.workspace }}/ansible/control-plane
+        run: |
+          ansible-playbook -i aws_ec2.yaml playbook.yaml --private-key ${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }}

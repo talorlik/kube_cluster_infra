@@ -1,0 +1,232 @@
+#!/bin/bash
+
+# install jq, awscli and ecr-credentials-helper
+sudo -u ubuntu -i <<'EOF'
+
+# Function to check if a package is installed
+is_installed() {
+    dpkg -l | grep -q "^ii  $1"
+}
+
+# Function to install a package if it is not installed
+install_if_missing() {
+    if ! is_installed "$1"; then
+        echo "Installing $1..."
+        sudo apt-get install -y "$1"
+    else
+        echo "$1 is already installed."
+    fi
+}
+
+sudo apt-get update
+
+# Packages to check and install
+for package in libc6 groff less unzip curl ca-certificates gnupg gpg jq software-properties-common apt-transport-https; do
+    install_if_missing "$package"
+done
+
+# Check if AWS CLI is installed and if not install and verify it
+if ! command -v aws &> /dev/null; then
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    if [ $? -ne 0 ]; then
+        echo "Failed to download AWS CLI"
+        exit 1
+    fi
+
+    unzip awscliv2.zip
+    if [ $? -ne 0 ]; then
+        echo "Failed to unzip AWS CLI"
+        exit 1
+    fi
+
+    sudo ./aws/install
+    if [ $? -ne 0 ]; then
+        echo "Failed to install AWS CLI"
+        exit 1
+    fi
+
+    aws --version
+    if [ $? -ne 0 ]; then
+        echo "AWS CLI installation verification failed"
+        exit 1
+    fi
+fi
+
+# sysctl params required by setup, params persist across reboots
+sudo cat <<INNER_EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.ipv4.ip_forward = 1
+INNER_EOF
+
+# apply sysctl params without reboot
+sudo sysctl --system
+
+# install cri-o kubelet kubeadm kubectl helm
+KUBERNETES_VERSION=${k8s_version}
+PROJECT_PATH=prerelease:/main
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+sudo echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+curl -fsSL https://pkgs.k8s.io/addons:/cri-o:/$PROJECT_PATH/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/cri-o-apt-keyring.gpg
+sudo echo "deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://pkgs.k8s.io/addons:/cri-o:/$PROJECT_PATH/deb/ /" | sudo tee /etc/apt/sources.list.d/cri-o.list
+
+curl https://baltocdn.com/helm/signing.asc | sudo gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+sudo echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+
+sudo apt-get update
+sudo apt-get install -y cri-o kubelet kubeadm kubectl helm
+sudo apt-mark hold kubelet kubeadm kubectl helm
+
+# start the container runtime
+sudo systemctl start crio.service
+sudo systemctl enable --now crio.service
+sudo systemctl enable --now kubelet
+
+# update kubelet extra args
+KUBELET_DEFAULTS_FILE="/etc/default/kubelet"
+EXTRA_ARGS="--cloud-provider=external --image-credential-provider-bin-dir=/usr/local/bin/ --image-credential-provider-config=/etc/kubernetes/ecr-credential-provider-config.yaml"
+if grep -q "KUBELET_EXTRA_ARGS" "$KUBELET_DEFAULTS_FILE"; then
+  if ! grep -q -- "$EXTRA_ARGS" "$KUBELET_DEFAULTS_FILE"; then
+      echo "$(cat $KUBELET_DEFAULTS_FILE)\"$EXTRA_ARGS\"" | sudo tee "$KUBELET_DEFAULTS_FILE"
+  fi
+else
+    echo "KUBELET_EXTRA_ARGS=\"$EXTRA_ARGS\"" | sudo tee "$KUBELET_DEFAULTS_FILE"
+fi
+
+# create CredentialProviderConfig for ECR users
+sudo curl -Lo /usr/local/bin/ecr-credential-provider https://artifacts.k8s.io/binaries/cloud-provider-aws/v1.29.0/linux/amd64/ecr-credential-provider-linux-amd64
+sudo chmod +x /usr/local/bin/ecr-credential-provider
+sudo tee /etc/kubernetes/ecr-credential-provider-config.yaml <<CRED_EOF > /dev/null
+apiVersion: kubelet.config.k8s.io/v1
+kind: CredentialProviderConfig
+providers:
+  - name: ecr-credential-provider
+    matchImages:
+      - "*.dkr.ecr.*.amazonaws.com"
+    defaultCacheDuration: "12h"
+    apiVersion: credentialprovider.kubelet.k8s.io/v1
+CRED_EOF
+
+# change hostname to a full form
+sudo hostname | grep -E '^ip-[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,3}$' && sudo hostnamectl set-hostname $(hostname).${aws_region}.compute.internal
+
+# disable swap memory
+sudo swapoff -a
+
+# add the command to crontab to make it persistent across reboots
+(crontab -l 2>/dev/null || true; echo "@reboot /sbin/swapoff -a") | crontab -
+
+# Check if the module is loaded
+if ! lsmod | grep -q br_netfilter; then
+    echo "br_netfilter module is not loaded. Loading it now..."
+    sudo modprobe br_netfilter
+
+    # Verify that the module was loaded successfully
+    if lsmod | grep -q br_netfilter; then
+        echo "br_netfilter module loaded successfully."
+    else
+        echo "Failed to load br_netfilter module."
+    fi
+else
+    echo "br_netfilter module is already loaded."
+fi
+
+sudo tee /etc/kubernetes/cluster-config.yaml <<CONF_EOF > /dev/null
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+clusterName: ${cluster_name}
+apiServer:
+  extraArgs:
+    cloud-provider: external
+    allow-privileged: "true"
+controllerManager:
+  extraArgs:
+    cloud-provider: external
+networking:
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/12"
+CONF_EOF
+
+# Run kubeadm init and capture the output
+KUBEADM_OUTPUT=$(sudo kubeadm init --config /etc/kubernetes/cluster-config.yaml)
+
+# Extract the join command from the output
+JOIN_COMMAND="sudo $(echo "$KUBEADM_OUTPUT" | grep -A 2 "kubeadm join" | tail -n 3 | tr -d '\\\n')"
+
+# Config kubectl
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# Store the full join command as a secret in AWS Secrets Manager
+aws secretsmanager create-secret --name ${join_secret_name} --secret-string "$JOIN_COMMAND" --region ${aws_region}
+
+# Capture the contents of the /etc/kubernetes/admin.conf file
+ADMIN_CONF=$(cat /etc/kubernetes/admin.conf)
+
+# Store the admin.conf content as a separate secret in AWS Secrets Manager
+aws secretsmanager create-secret --name ${kube_config_secret_name} --secret-string "$ADMIN_CONF" --region ${aws_region}
+
+# Install Kubernetes Dashboard
+helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+
+sudo tee /etc/kubernetes/k8s-dashboard-user.yaml <<DASH_EOF > /dev/null
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kubernetes-dashboard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kubernetes-dashboard
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: admin-user
+  namespace: kubernetes-dashboard
+  annotations:
+    kubernetes.io/service-account.name: "admin-user"
+type: kubernetes.io/service-account-token
+DASH_EOF
+
+kubectl apply -f k8s/k8s-dashboard-user.yaml
+
+DASHBOARD_TOKEN=$(kubectl get secret admin-user -n kubernetes-dashboard -o jsonpath={".data.token"} | base64 -d)
+
+# Store the dashboard token as a separate secret in AWS Secrets Manager
+aws secretsmanager create-secret --name ${kube_dashboard_token_secret_name} --secret-string "$DASHBOARD_TOKEN" --region ${aws_region}
+
+# Make sure SSM Agent is installed and running to allow connection to it from the Bastion machine
+if ! command -v amazon-ssm-agent &> /dev/null
+then
+    echo "SSM Agent not found. Installing..."
+    sudo apt-get install -y amazon-ssm-agent
+else
+    echo "SSM Agent already installed."
+fi
+
+# Ensure SSM Agent is running
+sudo systemctl enable amazon-ssm-agent
+sudo systemctl start amazon-ssm-agent
+
+# Function to regenerate and update the kubeadm join command
+update_join_command() {
+    NEW_JOIN_COMMAND="sudo $(sudo kubeadm token create --print-join-command)"
+    aws secretsmanager update-secret --secret-name ${join_secret_name} --secret-string "$NEW_JOIN_COMMAND" --region ${aws_region}
+}
+
+# Add cron job to regenerate the join command every 23 hours
+(crontab -l 2>/dev/null; echo "0 */23 * * * $(which bash) -c 'update_join_command'") | crontab -
+EOF

@@ -1,0 +1,12 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-east-1
+  - us-east-2
+keyed_groups:
+  - key: tags["kubernetes.io/role/control-plane"]
+filters:
+  "tag:kubernetes.io/role/control-plane": "1"
+  instance-state-name: running
+compose:
+  ansible_host: private_ip_address
+  ansible_user: ubuntu

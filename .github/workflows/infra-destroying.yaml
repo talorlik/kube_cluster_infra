@@ -1,0 +1,161 @@
+name: Kubernetes Cluster Infrastructure Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Select AWS Account'
+        required: true
+        type: choice
+        default: '019273956931'
+        options:
+          - '019273956931'
+      region:
+        description: 'Select AWS Region'
+        required: true
+        type: choice
+        default: 'us-east-1: N. Virginia'
+        options:
+          - 'us-east-1: N. Virginia'
+          - 'us-east-2: Ohio'
+      environment:
+        description: 'Select Environment'
+        required: true
+        type: choice
+        default: prod
+        options:
+          - prod
+          - dev
+
+jobs:
+  GetRunId:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.set_run_id.outputs.run_id }}
+    steps:
+      - name: Check and Install curl
+        run: |
+          if ! command -v curl &> /dev/null
+          then
+            echo "curl could not be found. Installing curl..."
+            sudo apt-get update
+            sudo apt-get install -y curl
+          else
+            echo "curl is already installed."
+          fi
+
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Fetch the latest successful workflow run ID from the Infra Deployment
+        id: set_run_id
+        run: |
+          LATEST_SUCCESS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/talorlik/kube_cluster_infra/actions/workflows/infra-provisioning-region.yaml/runs?status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id')
+
+          echo "run_id=$LATEST_SUCCESS" >> $GITHUB_OUTPUT
+
+          echo "The latest successful run ID is $LATEST_SUCCESS"
+
+  SetGlobals:
+    runs-on: ubuntu-latest
+    needs:
+      - GetRunId
+    outputs:
+      region_code: ${{ steps.set_region.outputs.region_code }}
+      country: ${{ steps.set_values.outputs.country }}
+      state: ${{ steps.set_values.outputs.state }}
+      locality: ${{ steps.set_values.outputs.locality }}
+      organization: ${{ steps.set_values.outputs.organization }}
+      common_name: ${{ steps.set_values.outputs.common_name }}
+    steps:
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Set Region
+        id: set_region
+        run: |
+          SELECTED_REGION="${{ inputs.region }}"
+          echo "region_code=${SELECTED_REGION%%:*}" >> $GITHUB_OUTPUT
+
+      - name: Download Output JSON file
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          github-token: "${{ secrets.GH_TOKEN }}"
+          repository: talorlik/kube_cluster_infra
+          run-id: ${{ needs.GetRunId.outputs.run_id }}
+
+      - name: Extract outputs from file and set as environment variables
+        id: set_values
+        env:
+          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-tf-outputs.json"
+        run: |
+          echo "country=$(jq -r '.country.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "state=$(jq -r '.state.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "locality=$(jq -r '.locality.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "organization=$(jq -r '.organization.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "common_name=$(jq -r '.common_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+  Terraform:
+    runs-on: ubuntu-latest
+    needs:
+      - SetGlobals
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ needs.SetGlobals.outputs.region_code }}
+    defaults:
+      run:
+        working-directory: ./tf_infra
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.2
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform workspace select
+        run: terraform workspace select ${{ env.AWS_REGION }} || terraform workspace new ${{ env.AWS_REGION }}
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan destroy
+        run: |
+          terraform plan \
+            -var-file="region.${{ env.AWS_REGION }}.tfvars" \
+            -var "env=${{ inputs.environment }}" \
+            -var "region=${{ env.AWS_REGION }}" \
+            -var "country=${{ needs.SetGlobals.outputs.country }}" \
+            -var "state=${{ needs.SetGlobals.outputs.state }}" \
+            -var "locality=${{ needs.SetGlobals.outputs.locality }}" \
+            -var "organization=${{ needs.SetGlobals.outputs.organization }}" \
+            -var "common_name=${{ needs.SetGlobals.outputs.common_name }}" \
+            -destroy -out region.${{ env.AWS_REGION }}.${{ inputs.environment }}.tfplan
+
+      - name: Destroy infrastructure
+        run: terraform apply -auto-approve region.${{ env.AWS_REGION }}.${{ inputs.environment }}.tfplan

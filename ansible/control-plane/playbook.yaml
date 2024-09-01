@@ -1,0 +1,188 @@
+- name: Control Plane EC2s
+  hosts: all
+  become: yes
+  vars:
+    ansible_user: ubuntu
+  tasks:
+    - name: Get values from environment
+      set_fact:
+        aws_account: "{{ lookup('env', 'AWS_ACCOUNT') }}"
+        aws_region: "{{ lookup('env', 'AWS_REGION') }}"
+        certificate_arn: "{{ lookup('env', 'CERTIFICATE_ARN') }}"
+        certificate_body: "{{ lookup('env', 'CERTIFICATE_BODY') }}"
+        certificate_key: "{{ lookup('env', 'CERTIFICATE_KEY') }}"
+        sub_domain_name: "{{ lookup('env', 'SUB_DOMAIN_NAME') }}"
+        alb_sg_id: "{{ lookup('env', 'ALB_SG_ID') }}"
+        alb_name: "{{ lookup('env', 'ALB_NAME') }}"
+        alb_tags: "{{ lookup('env', 'ALB_TAGS') }}"
+
+    - name: Ensure all nodes are ready and there are at least two nodes
+      shell: |
+        ready_nodes=$(kubectl get nodes --no-headers | grep ' Ready' | wc -l)
+        total_nodes=$(kubectl get nodes --no-headers | wc -l)
+        if [ "$ready_nodes" -ge 2 ] && [ "$ready_nodes" -eq "$total_nodes" ]; then
+          exit 0
+        else
+          exit 1
+        fi
+      register: nodes_check
+      retries: 10
+      delay: 60
+      until: nodes_check.rc == 0
+
+    - name: Ensure kube-system pods are ready
+      shell: |
+        running_pods=$(kubectl get pods -n kube-system --no-headers | grep ' Running' | wc -l)
+        total_pods=$(kubectl get pods -n kube-system --no-headers | wc -l)
+        if [ "$running_pods" -eq "$total_pods" ]; then
+          exit 0
+        else
+          exit 1
+        fi
+      register: pods_check
+      retries: 10
+      delay: 60
+      until: pods_check.rc == 0
+
+    - name: Install Container Network Interface (CNI) - Flannel
+      command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+
+    - name: Install AWS Cloud Controller Manager
+      command: kubectl apply -k 'github.com/kubernetes/cloud-provider-aws/examples/existing-cluster/base/?ref=master'
+
+    - name: Add helm repository for EBS CSI driver
+      command: helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+
+    - name: Update helm repositories
+      command: helm repo update
+
+    - name: Create EBS CSI driver values file
+      copy:
+        content: |
+          storageClasses:
+            - name: ebs-sc
+              annotations:
+                storageclass.kubernetes.io/is-default-class: "true"
+              provisioner: ebs.csi.aws.com
+              volumeBindingMode: WaitForFirstConsumer
+              parameters:
+                csi.storage.k8s.io/fstype: xfs
+                type: gp3
+                encrypted: "true"
+        dest: /etc/kubernetes/ebs-csi-values.yaml
+
+    - name: Install EBS CSI driver using helm
+      command: helm upgrade --install aws-ebs-csi-driver -f /etc/kubernetes/ebs-csi-values.yaml -n kube-system aws-ebs-csi-driver/aws-ebs-csi-driver
+
+    - name: Add helm repository for nginx ingress controller
+      command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+
+    - name: Update helm repositories (nginx-ingress)
+      command: helm repo update
+
+    - name: Install nginx-ingress-controller with NodePort service type
+      command: >
+        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
+        --namespace ingress-nginx
+        --create-namespace
+        --set controller.service.type=NodePort
+        --set controller.service.nodePorts.https=8443
+
+    - name: Create the TLS secret using the certificate body and key
+      command: >
+        kubectl create secret tls tls-secret
+        --namespace ingress-nginx
+        --cert=<(echo "{{ certificate_body }}" | base64 --decode)
+        --key=<(echo "{{ certificate_key }}" | base64 --decode)
+
+    - name: Create the Ingress resource with ALB configuration
+      copy:
+        content: |
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: alb-ingress-connect-nginx
+            namespace: ingress-nginx
+            annotations:
+              # Ingress Core Settings
+              kubernetes.io/ingress.class: 'alb'
+              alb.ingress.kubernetes.io/scheme: 'internet-facing'
+              kubernetes.io/service-name: 'ingress-nginx/ingress-nginx-controller'
+
+              # Health Check Settings
+              alb.ingress.kubernetes.io/healthcheck-protocol: 'HTTPS'
+              alb.ingress.kubernetes.io/healthcheck-port: 8443
+              alb.ingress.kubernetes.io/healthcheck-path: '/health'
+              alb.ingress.kubernetes.io/healthcheck-interval-seconds: 30
+              alb.ingress.kubernetes.io/healthcheck-timeout-seconds: 5
+              alb.ingress.kubernetes.io/success-codes: '200-399,404'
+              alb.ingress.kubernetes.io/healthy-threshold-count: 5
+              alb.ingress.kubernetes.io/unhealthy-threshold-count: 2
+
+              # SSL Settings
+              alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTPS":8443}]'
+              alb.ingress.kubernetes.io/certificate-arn: '{{ certificate_arn }}'
+              nginx.ingress.kubernetes.io/backend-protocol: 'HTTPS'
+
+              alb.ingress.kubernetes.io/security-groups: '{{ alb_sg_id }}'
+              alb.ingress.kubernetes.io/load-balancer-name: '{{ alb_name }}'
+              alb.ingress.kubernetes.io/tags: '{{ alb_tags }}'
+          spec:
+            rules:
+            - host: "{{ sub_domain_name }}"  # The domain where you want to route traffic
+              http:
+                paths:
+                - path: /dashboard/*
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: kubernetes-dashboard-kong-proxy
+                      port:
+                        number: 443
+                - path: /*
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: polybot-service  # The name of your Polybot service
+                      port:
+                        number: 8443  # The port exposed by your Polybot service
+            tls:
+            - hosts:
+              - "{{ sub_domain_name }}"
+              secretName: tls-secret
+            ingressClassName: nginx
+        dest: /etc/kubernetes/alb-ingress-connect-nginx.yaml
+
+    - name: Apply the Ingress resource
+      command: kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
+
+    - name: Wait for the ALB to be created and active
+      ec2_elb_info:
+        names:
+          - "{{ alb_name }}"
+      register: alb_info
+      retries: 10
+      delay: 60
+      until: alb_info.load_balancers | length > 0 and alb_info.load_balancers[0].state == 'active'
+
+    - name: Set ALB DNS name and Zone ID facts
+      set_fact:
+        alb_dns_name: "{{ alb_info.load_balancers[0].dns_name }}"
+        alb_zone_id: "{{ alb_info.load_balancers[0].zone_id }}"
+
+    - name: Get Route53 Zone ID
+      community.aws.route53_zone_info:
+        query: public
+        name: "int-devops.click."
+      register: route53_zone_info
+
+    - name: Create Route53 A record for ALB
+      community.aws.route53:
+        zone: "{{ route53_zone_info.zones[0].id }}"
+        record: "{{ sub_domain_name }}"
+        type: A
+        alias:
+          name: "{{ alb_dns_name }}"
+          zone_id: "{{ alb_zone_id }}"
+          evaluate_target_health: false
+      when: route53_zone_info.zones | length > 0

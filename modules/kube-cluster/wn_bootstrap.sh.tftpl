@@ -1,0 +1,167 @@
+#!/bin/bash
+
+# install jq, awscli and ecr-credentials-helper
+sudo -u ubuntu -i <<'EOF'
+
+# Function to check if a package is installed
+is_installed() {
+    dpkg -l | grep -q "^ii  $1"
+}
+
+# Function to install a package if it is not installed
+install_if_missing() {
+    if ! is_installed "$1"; then
+        echo "Installing $1..."
+        sudo apt-get install -y "$1"
+    else
+        echo "$1 is already installed."
+    fi
+}
+
+sudo apt-get update
+
+# Packages to check and install
+for package in libc6 groff less unzip curl ca-certificates gnupg gpg jq software-properties-common apt-transport-https; do
+    install_if_missing "$package"
+done
+
+# Check if AWS CLI is installed and if not install and verify it
+if ! command -v aws &> /dev/null; then
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    if [ $? -ne 0 ]; then
+        echo "Failed to download AWS CLI"
+        exit 1
+    fi
+
+    unzip awscliv2.zip
+    if [ $? -ne 0 ]; then
+        echo "Failed to unzip AWS CLI"
+        exit 1
+    fi
+
+    sudo ./aws/install
+    if [ $? -ne 0 ]; then
+        echo "Failed to install AWS CLI"
+        exit 1
+    fi
+
+    aws --version
+    if [ $? -ne 0 ]; then
+        echo "AWS CLI installation verification failed"
+        exit 1
+    fi
+fi
+
+# sysctl params required by setup, params persist across reboots
+sudo cat <<INNER_EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.ipv4.ip_forward = 1
+INNER_EOF
+
+# apply sysctl params without reboot
+sudo sysctl --system
+
+# install cri-o kubelet kubeadm
+KUBERNETES_VERSION=${k8s_version}
+PROJECT_PATH=prerelease:/main
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+sudo echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+curl -fsSL https://pkgs.k8s.io/addons:/cri-o:/$PROJECT_PATH/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/cri-o-apt-keyring.gpg
+sudo echo "deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://pkgs.k8s.io/addons:/cri-o:/$PROJECT_PATH/deb/ /" | sudo tee /etc/apt/sources.list.d/cri-o.list
+
+sudo apt-get update
+sudo apt-get install -y cri-o kubelet kubeadm
+sudo apt-mark hold kubelet kubeadm
+
+# start the container runtime
+sudo systemctl start crio.service
+sudo systemctl enable --now crio.service
+sudo systemctl enable --now kubelet
+
+# update kubelet extra args
+KUBELET_DEFAULTS_FILE="/etc/default/kubelet"
+EXTRA_ARGS="--cloud-provider=external --image-credential-provider-bin-dir=/usr/local/bin/ --image-credential-provider-config=/etc/kubernetes/ecr-credential-provider-config.yaml"
+if grep -q "KUBELET_EXTRA_ARGS" "$KUBELET_DEFAULTS_FILE"; then
+  if ! grep -q -- "$EXTRA_ARGS" "$KUBELET_DEFAULTS_FILE"; then
+      echo "$(cat $KUBELET_DEFAULTS_FILE)\"$EXTRA_ARGS\"" | sudo tee "$KUBELET_DEFAULTS_FILE"
+  fi
+else
+    echo "KUBELET_EXTRA_ARGS=\"$EXTRA_ARGS\"" | sudo tee "$KUBELET_DEFAULTS_FILE"
+fi
+
+# create CredentialProviderConfig for ECR users
+sudo curl -Lo /usr/local/bin/ecr-credential-provider https://artifacts.k8s.io/binaries/cloud-provider-aws/v1.29.0/linux/amd64/ecr-credential-provider-linux-amd64
+sudo chmod +x /usr/local/bin/ecr-credential-provider
+sudo tee /etc/kubernetes/ecr-credential-provider-config.yaml <<CRED_EOF > /dev/null
+apiVersion: kubelet.config.k8s.io/v1
+kind: CredentialProviderConfig
+providers:
+  - name: ecr-credential-provider
+    matchImages:
+      - "*.dkr.ecr.*.amazonaws.com"
+    defaultCacheDuration: "12h"
+    apiVersion: credentialprovider.kubelet.k8s.io/v1
+CRED_EOF
+
+# change hostname to a full form
+sudo hostname | grep -E '^ip-[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,3}$' && sudo hostnamectl set-hostname $(hostname).${aws_region}.compute.internal
+
+# disable swap memory
+sudo swapoff -a
+
+# add the command to crontab to make it persistent across reboots
+(crontab -l 2>/dev/null || true; echo "@reboot /sbin/swapoff -a") | crontab -
+
+# Check if the module is loaded
+if ! lsmod | grep -q br_netfilter; then
+    echo "br_netfilter module is not loaded. Loading it now..."
+    sudo modprobe br_netfilter
+
+    # Verify that the module was loaded successfully
+    if lsmod | grep -q br_netfilter; then
+        echo "br_netfilter module loaded successfully."
+    else
+        echo "Failed to load br_netfilter module."
+    fi
+else
+    echo "br_netfilter module is already loaded."
+fi
+
+# Make sure SSM Agent is installed and running to allow connection to it from the Bastion machine
+if ! command -v amazon-ssm-agent &> /dev/null
+then
+    echo "SSM Agent not found. Installing..."
+    sudo apt-get install -y amazon-ssm-agent
+else
+    echo "SSM Agent already installed."
+fi
+
+# Ensure SSM Agent is running
+sudo systemctl enable amazon-ssm-agent
+sudo systemctl start amazon-ssm-agent
+
+# Function to fetch the join command from Secrets Manager
+fetch_join_command() {
+  aws secretsmanager get-secret-value --secret-id ${join_secret_name} --region ${aws_region} --query SecretString --output text
+}
+
+# Retry loop to fetch the join command
+while true; do
+  JOIN_COMMAND=$(fetch_join_command)
+
+  if [ -n "$JOIN_COMMAND" ]; then
+    echo "Successfully retrieved join command."
+    break
+  else
+    echo "Join command not available yet, retrying in 15 seconds..."
+    sleep 15
+  fi
+done
+
+# Run the kubeadm join command
+$JOIN_COMMAND
+
+# Sample join command
+# sudo kubeadm join 172.31.95.35:6443 --token smbrii.v7cgfywdzgfnfet7 --discovery-token-ca-cert-hash sha256:8d105b88bcf22b61d034e16a1acfda2e8f8fad1604a6eb0bca7366efa1d5bcdd
+EOF
