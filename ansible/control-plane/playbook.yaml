@@ -123,6 +123,7 @@
               alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTPS":8443}]'
               alb.ingress.kubernetes.io/certificate-arn: '{{ certificate_arn }}'
               nginx.ingress.kubernetes.io/backend-protocol: 'HTTPS'
+              nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 
               alb.ingress.kubernetes.io/security-groups: '{{ alb_sg_id }}'
               alb.ingress.kubernetes.io/load-balancer-name: '{{ alb_name }}'
