@@ -100,7 +100,7 @@ wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-domain_certificate_name = "sub-domain/certificate/v2b"
+domain_certificate_name = "sub-domain/certificate/v3"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"
