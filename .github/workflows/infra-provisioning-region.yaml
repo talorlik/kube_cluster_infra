@@ -117,13 +117,13 @@ jobs:
           echo "CP_PEM_FILE_PATH=$(terraform output -raw cp_pem_file_path)" >> $GITHUB_ENV
           echo "CP_PUB_FILE_NAME=$(terraform output -raw cp_pub_file_name)" >> $GITHUB_ENV
           echo "CP_PUB_FILE_PATH=$(terraform output -raw cp_pub_file_path)" >> $GITHUB_ENV
-          echo "cp_pem_file_name=${{ env.CP_PEM_FILE_NAME }}" >> $GITHUB_OUTPUT
+          echo "cp_pem_file_name=$(terraform output -raw cp_pem_file_name)" >> $GITHUB_OUTPUT
 
           echo "WN_PEM_FILE_NAME=$(terraform output -raw wn_pem_file_name)" >> $GITHUB_ENV
           echo "WN_PEM_FILE_PATH=$(terraform output -raw wn_pem_file_path)" >> $GITHUB_ENV
           echo "WN_PUB_FILE_NAME=$(terraform output -raw wn_pub_file_name)" >> $GITHUB_ENV
           echo "WN_PUB_FILE_PATH=$(terraform output -raw wn_pub_file_path)" >> $GITHUB_ENV
-          echo "wn_pem_file_name=${{ env.WN_PEM_FILE_NAME }}" >> $GITHUB_OUTPUT
+          echo "wn_pem_file_name=$(terraform output -raw wn_pem_file_name)" >> $GITHUB_OUTPUT
 
           echo "BASTION_PEM_FILE_NAME=$(terraform output -raw bastion_pem_file_name)" >> $GITHUB_ENV
           echo "BASTION_PEM_FILE_PATH=$(terraform output -raw bastion_pem_file_path)" >> $GITHUB_ENV
