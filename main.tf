@@ -322,7 +322,7 @@ module "bastion" {
 }
 
 ################# Route 53 ######################
-module "sub_domain_and_cert" {
+module "sub_domain_cert" {
   source       = "./modules/sub-domain-cert"
   country      = var.country
   state        = var.state
@@ -340,7 +340,7 @@ module "secret_sub_domain_cert" {
   region       = var.region
   prefix       = var.prefix
   secret_name  = var.domain_certificate_name
-  secret_value = module.sub_domain_and_cert.certificate_body
+  secret_value = module.sub_domain_cert.certificate_body
   tags         = local.tags
 }
 

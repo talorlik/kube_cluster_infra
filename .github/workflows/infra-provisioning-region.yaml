@@ -77,6 +77,17 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       OUTPUTS_ARTIFACT_NAME: ${{ needs.SetRegion.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json
     steps:
+      - name: Check and install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v2
 
@@ -128,14 +139,14 @@ jobs:
           echo "BASTION_PEM_FILE_NAME=$(terraform output -raw bastion_pem_file_name)" >> $GITHUB_ENV
           echo "BASTION_PEM_FILE_PATH=$(terraform output -raw bastion_pem_file_path)" >> $GITHUB_ENV
 
-          terraform output -json > ${{ github.workspace }}/${{ env.OUTPUTS_ARTIFACT_NAME }}
-
           echo "certificate_arn=$(terraform output -raw certificate_arn)" >> $GITHUB_OUTPUT
           echo -e "certificate_body=$(terraform output -raw certificate_body)" >> $GITHUB_OUTPUT
-          echo -e "certificate_key=$(terraform output -raw certificate_key)" >> $GITHUB_OUTPUT
+          echo -e "certificate_key=$(terraform output -json | jq -r '.certificate_key.value')" >> $GITHUB_OUTPUT
           echo "alb_sg_id=$(terraform output -raw alb_sg_id)" >> $GITHUB_OUTPUT
           echo "prefix=$(terraform output -raw prefix)" >> $GITHUB_OUTPUT
           echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
+
+          terraform output -json > ${{ github.workspace }}/${{ env.OUTPUTS_ARTIFACT_NAME }}
 
       - name: Upload Control Plane private key as artifact
         uses: actions/upload-artifact@v4

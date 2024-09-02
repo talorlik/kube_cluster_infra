@@ -66,36 +66,36 @@ output "alb_sg_id" {
 ############# Sub-Domian Cert ##################
 
 output "certificate_body" {
-  value = module.sub_domain_and_cert.certificate_body
+  value = module.sub_domain_cert.certificate_body
 }
 
 output "certificate_key" {
-  value     = module.sub_domain_and_cert.certificate_key
+  value     = module.sub_domain_cert.certificate_key
   sensitive = true
 }
 
 output "certificate_arn" {
-  value = module.sub_domain_and_cert.certificate_arn
+  value = module.sub_domain_cert.certificate_arn
 }
 
 output "country" {
-  value = module.sub_domain_and_cert.country
+  value = module.sub_domain_cert.country
 }
 
 output "state" {
-  value = module.sub_domain_and_cert.state
+  value = module.sub_domain_cert.state
 }
 
 output "locality" {
-  value = module.sub_domain_and_cert.locality
+  value = module.sub_domain_cert.locality
 }
 
 output "organization" {
-  value = module.sub_domain_and_cert.organization
+  value = module.sub_domain_cert.organization
 }
 
 output "common_name" {
-  value = module.sub_domain_and_cert.common_name
+  value = module.sub_domain_cert.common_name
 }
 
 ################### Secrets #####################
