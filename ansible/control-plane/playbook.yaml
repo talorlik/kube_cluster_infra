@@ -162,7 +162,7 @@
         names:
           - "{{ alb_name }}"
       register: alb_info
-      retries: 10
+      retries: 20
       delay: 60
       until: alb_info.load_balancers | length > 0 and alb_info.load_balancers[0].state == 'active'
 
