@@ -138,6 +138,13 @@ resource "aws_instance" "cp_ec2" {
     volume_type = "gp3"
   }
 
+  lifecycle {
+    ignore_changes = [
+      root_block_device,
+      ebs_block_device,
+    ]
+  }
+
   tags = merge(
     {
       Name = local.ec2_instance_name
