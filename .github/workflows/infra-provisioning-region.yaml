@@ -131,8 +131,8 @@ jobs:
           terraform output -json > ${{ github.workspace }}/${{ env.OUTPUTS_ARTIFACT_NAME }}
 
           echo "certificate_arn=$(terraform output -raw certificate_arn)" >> $GITHUB_OUTPUT
-          echo "certificate_body=$(terraform output -raw certificate_body)" >> $GITHUB_OUTPUT
-          echo "certificate_key=$(terraform output -raw certificate_key)" >> $GITHUB_OUTPUT
+          echo -e "certificate_body=$(terraform output -raw certificate_body)" >> $GITHUB_OUTPUT
+          echo -e "certificate_key=$(terraform output -raw certificate_key)" >> $GITHUB_OUTPUT
           echo "alb_sg_id=$(terraform output -raw alb_sg_id)" >> $GITHUB_OUTPUT
           echo "prefix=$(terraform output -raw prefix)" >> $GITHUB_OUTPUT
           echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
