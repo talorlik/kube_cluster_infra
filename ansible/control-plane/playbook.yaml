@@ -158,7 +158,7 @@
       command: kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
 
     - name: Wait for the ALB to be created and active
-      ec2_elb_info:
+      community.aws.ec2_elb_info:
         names:
           - "{{ alb_name }}"
       register: alb_info
