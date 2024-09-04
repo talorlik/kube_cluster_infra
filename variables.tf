@@ -234,7 +234,12 @@ variable "common_name" {
 
 ################### Secrets ########################
 
-variable "domain_certificate_name" {
+variable "sub_domain_cert_body_secret_name" {
+  description = "The name of the secret"
+  type        = string
+}
+
+variable "sub_domain_cert_key_secret_name" {
   description = "The name of the secret"
   type        = string
 }

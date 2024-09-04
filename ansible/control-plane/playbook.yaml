@@ -9,8 +9,8 @@
         aws_account: "{{ lookup('env', 'AWS_ACCOUNT') }}"
         aws_region: "{{ lookup('env', 'AWS_REGION') }}"
         certificate_arn: "{{ lookup('env', 'CERTIFICATE_ARN') }}"
-        certificate_body: "{{ lookup('env', 'CERTIFICATE_BODY') }}"
-        certificate_key: "{{ lookup('env', 'CERTIFICATE_KEY') }}"
+        certificate_body_secret_name: "{{ lookup('env', 'CERTIFICATE_BODY_SECRET_NAME') }}"
+        certificate_key_secret_name: "{{ lookup('env', 'CERTIFICATE_KEY_SECRET_NAME') }}"
         sub_domain_name: "{{ lookup('env', 'SUB_DOMAIN_NAME') }}"
         alb_sg_id: "{{ lookup('env', 'ALB_SG_ID') }}"
         alb_name: "{{ lookup('env', 'ALB_NAME') }}"
@@ -88,12 +88,12 @@
         --set controller.service.type=NodePort
         --set controller.service.nodePorts.https=8443
 
-    - name: Create the TLS secret using the certificate body and key
+    - name: Create the TLS secret using the certificate body and key saved in AWS Secrets Manager
       command: >
         kubectl create secret tls tls-secret
         --namespace ingress-nginx
-        --cert=<(echo "{{ certificate_body }}" | base64 --decode)
-        --key=<(echo "{{ certificate_key }}" | base64 --decode)
+        --cert=<(aws secretsmanager get-secret-value --secret-id "{{ certificate_body_secret_name }}" --query SecretString --output text)
+        --key=<(aws secretsmanager get-secret-value --secret-id "{{ certificate_key_secret_name }}" --query SecretString --output text)
 
     - name: Create the Ingress resource with ALB configuration
       copy:
@@ -130,7 +130,7 @@
               alb.ingress.kubernetes.io/tags: '{{ alb_tags }}'
           spec:
             rules:
-            - host: "{{ sub_domain_name }}"  # The domain where you want to route traffic
+            - host: "{{ sub_domain_name }}"
               http:
                 paths:
                 - path: /dashboard/*
@@ -144,9 +144,9 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: polybot-service  # The name of your Polybot service
+                      name: polybot-service
                       port:
-                        number: 8443  # The port exposed by your Polybot service
+                        number: 8443
             tls:
             - hosts:
               - "{{ sub_domain_name }}"

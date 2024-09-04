@@ -67,8 +67,8 @@ jobs:
       cp_pem_file_name: ${{ steps.tf_output.outputs.cp_pem_file_name }}
       wn_pem_file_name: ${{ steps.tf_output.outputs.wn_pem_file_name }}
       certificate_arn: ${{ steps.tf_output.outputs.certificate_arn }}
-      certificate_body: ${{ steps.tf_output.outputs.certificate_body }}
-      certificate_key: ${{ steps.tf_output.outputs.certificate_key }}
+      sub_domain_cert_body_secret_name: ${{ steps.tf_output.outputs.sub_domain_cert_body_secret_name }}
+      sub_domain_cert_key_secret_name: ${{ steps.tf_output.outputs.sub_domain_cert_key_secret_name }}
       alb_sg_id: ${{ steps.tf_output.outputs.alb_sg_id }}
       prefix: ${{ steps.tf_output.outputs.prefix }}
       cluster_name: ${{ steps.tf_output.outputs.cluster_name }}
@@ -140,8 +140,8 @@ jobs:
           echo "BASTION_PEM_FILE_PATH=$(terraform output -raw bastion_pem_file_path)" >> $GITHUB_ENV
 
           echo "certificate_arn=$(terraform output -raw certificate_arn)" >> $GITHUB_OUTPUT
-          echo -e "certificate_body=$(terraform output -raw certificate_body)" >> $GITHUB_OUTPUT
-          echo -e "certificate_key=$(terraform output -json | jq -r '.certificate_key.value')" >> $GITHUB_OUTPUT
+          echo "sub_domain_cert_body_secret_name=$(terraform output -raw sub_domain_cert_body_secret_name)" >> $GITHUB_OUTPUT
+          echo "sub_domain_cert_key_secret_name=$(terraform output -raw sub_domain_cert_key_secret_name)" >> $GITHUB_OUTPUT
           echo "alb_sg_id=$(terraform output -raw alb_sg_id)" >> $GITHUB_OUTPUT
           echo "prefix=$(terraform output -raw prefix)" >> $GITHUB_OUTPUT
           echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
@@ -236,8 +236,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ needs.SetRegion.outputs.region_code }}
           CERTIFICATE_ARN: ${{ needs.Terraform.outputs.certificate_arn }}
-          CERTIFICATE_BODY: ${{ needs.Terraform.outputs.certificate_body }}
-          CERTIFICATE_KEY: ${{ needs.Terraform.outputs.certificate_key }}
+          CERTIFICATE_BODY_SECRET_NAME: ${{ needs.Terraform.outputs.sub_domain_cert_body_secret_name }}
+          CERTIFICATE_KEY_SECRET_NAME: ${{ needs.Terraform.outputs.sub_domain_cert_key_secret_name }}
           SUB_DOMAIN_NAME: ${{ inputs.common_name }}
           ALB_SG_ID: ${{ needs.Terraform.outputs.alb_sg_id }}
           ALB_NAME: "${{ needs.Terraform.outputs.prefix }}-${{ needs.SetRegion.outputs.region_code }}-alb-${{ inputs.environment }}"

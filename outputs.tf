@@ -100,12 +100,20 @@ output "common_name" {
 
 ################### Secrets #####################
 
-output "sub_domain_secret_name" {
-  value = module.secret_sub_domain_cert.secret_name
+output "sub_domain_cert_body_secret_name" {
+  value = module.secret_sub_domain_cert_body.secret_name
 }
 
-output "sub_domain_secret_arn" {
-  value = module.secret_sub_domain_cert.secret_arn
+output "sub_domain_cert_body_secret_arn" {
+  value = module.secret_sub_domain_cert_body.secret_arn
+}
+
+output "sub_domain_cert_key_secret_name" {
+  value = module.secret_sub_domain_cert_key.secret_name
+}
+
+output "sub_domain_cert_key_secret_arn" {
+  value = module.secret_sub_domain_cert_key.secret_arn
 }
 
 ################## ECR #######################

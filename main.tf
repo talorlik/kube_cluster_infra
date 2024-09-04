@@ -334,13 +334,23 @@ module "sub_domain_cert" {
 
 ################## Secrets ######################
 
-module "secret_sub_domain_cert" {
+module "secret_sub_domain_cert_body" {
   source       = "./modules/secret-manager"
   env          = var.env
   region       = var.region
   prefix       = var.prefix
-  secret_name  = var.domain_certificate_name
+  secret_name  = var.sub_domain_cert_body_secret_name
   secret_value = module.sub_domain_cert.certificate_body
+  tags         = local.tags
+}
+
+module "secret_sub_domain_cert_key" {
+  source       = "./modules/secret-manager"
+  env          = var.env
+  region       = var.region
+  prefix       = var.prefix
+  secret_name  = var.sub_domain_cert_key_secret_name
+  secret_value = module.sub_domain_cert.certificate_key
   tags         = local.tags
 }
 
