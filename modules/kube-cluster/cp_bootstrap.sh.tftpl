@@ -159,13 +159,13 @@ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 # Store the full join command as a secret in AWS Secrets Manager
-aws secretsmanager create-secret --name ${join_secret_name} --secret-string "$JOIN_COMMAND" --region ${aws_region}
+aws secretsmanager create-secret --name ${join_secret_name} --secret-string "$JOIN_COMMAND" --region ${aws_region} --tags ${join_secret_tags}
 
 # Capture the contents of the /etc/kubernetes/admin.conf file
 ADMIN_CONF=$(cat /etc/kubernetes/admin.conf)
 
 # Store the admin.conf content as a separate secret in AWS Secrets Manager
-aws secretsmanager create-secret --name ${kube_config_secret_name} --secret-string "$ADMIN_CONF" --region ${aws_region}
+aws secretsmanager create-secret --name ${kube_config_secret_name} --secret-string "$ADMIN_CONF" --region ${aws_region} --tags ${kube_config_secret_tags}
 
 # Install Kubernetes Dashboard
 helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
@@ -206,7 +206,7 @@ kubectl apply -f k8s/k8s-dashboard-user.yaml
 DASHBOARD_TOKEN=$(kubectl get secret admin-user -n kubernetes-dashboard -o jsonpath={".data.token"} | base64 -d)
 
 # Store the dashboard token as a separate secret in AWS Secrets Manager
-aws secretsmanager create-secret --name ${kube_dashboard_token_secret_name} --secret-string "$DASHBOARD_TOKEN" --region ${aws_region}
+aws secretsmanager create-secret --name ${kube_dashboard_token_secret_name} --secret-string "$DASHBOARD_TOKEN" --region ${aws_region} --tags ${kube_dashboard_token_secret_tags}
 
 # Make sure SSM Agent is installed and running to allow connection to it from the Bastion machine
 if ! command -v amazon-ssm-agent &> /dev/null

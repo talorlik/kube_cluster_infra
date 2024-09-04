@@ -284,19 +284,22 @@ locals {
 }
 
 module "kube_cluster" {
-  source                       = "./modules/kube-cluster"
-  env                          = var.env
-  region                       = var.region
-  prefix                       = var.prefix
-  k8s_version                  = var.k8s_version
-  cluster_name                 = local.cluster_name
-  ami                          = local.ami_id
-  cp_instance_type             = var.cp_instance_type
-  cp_azs                       = local.cp_azs
-  cp_vpc_security_group_ids    = [module.cp_sg.id]
-  cp_key_pair_name             = module.cp_ec2_key_pair.key_pair_name
-  cp_private_subnets           = local.cp_private_subnet
-  cp_iam_instance_profile_name = module.cp_iam_role.iam_instance_profile_name
+  source                           = "./modules/kube-cluster"
+  env                              = var.env
+  region                           = var.region
+  prefix                           = var.prefix
+  k8s_version                      = var.k8s_version
+  cluster_name                     = local.cluster_name
+  join_secret_name                 = var.join_secret_name
+  kube_config_secret_name          = var.kube_config_secret_name
+  kube_dashboard_token_secret_name = var.kube_dashboard_token_secret_name
+  ami                              = local.ami_id
+  cp_instance_type                 = var.cp_instance_type
+  cp_azs                           = local.cp_azs
+  cp_vpc_security_group_ids        = [module.cp_sg.id]
+  cp_key_pair_name                 = module.cp_ec2_key_pair.key_pair_name
+  cp_private_subnets               = local.cp_private_subnet
+  cp_iam_instance_profile_name     = module.cp_iam_role.iam_instance_profile_name
 
   wn_instance_type             = var.wn_instance_type
   wn_iam_instance_profile_name = module.wn_iam_role.iam_instance_profile_name

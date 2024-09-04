@@ -102,6 +102,9 @@ sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
 sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v1a"
 sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v1a"
+join_secret_name                 = "kubeadm/join-details"
+kube_config_secret_name          = "kube/config"
+kube_dashboard_token_secret_name = "kube/dashboard-token"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"

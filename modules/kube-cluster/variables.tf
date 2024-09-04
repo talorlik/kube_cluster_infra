@@ -27,19 +27,16 @@ variable "cluster_name" {
 variable "join_secret_name" {
   description = "The Name of the join secret"
   type        = string
-  default     = "kubeadm-join-details"
 }
 
 variable "kube_config_secret_name" {
   description = "The Name of the Kube Config secret"
   type        = string
-  default     = "kube-config"
 }
 
 variable "kube_dashboard_token_secret_name" {
   description = "The Name of the Kube Config secret"
   type        = string
-  default     = "kube-dashboard-token"
 }
 
 variable "ami" {

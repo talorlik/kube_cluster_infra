@@ -244,6 +244,21 @@ variable "sub_domain_cert_key_secret_name" {
   type        = string
 }
 
+variable "join_secret_name" {
+  description = "The Name of the join secret"
+  type        = string
+}
+
+variable "kube_config_secret_name" {
+  description = "The Name of the Kube Config secret"
+  type        = string
+}
+
+variable "kube_dashboard_token_secret_name" {
+  description = "The Name of the Kube Config secret"
+  type        = string
+}
+
 ##################### ECR ##########################
 
 variable "ecr_name" {

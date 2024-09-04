@@ -1,23 +1,56 @@
 locals {
-  cp_ec2_name             = "${var.prefix}-${var.region}-${var.cp_instance_name}-${var.env}"
-  launch_template_name    = "${var.prefix}-${var.region}-${var.launch_template_name}-${var.env}"
-  wn_ec2_name             = "${var.prefix}-${var.region}-${var.wn_instance_name}-${var.env}"
-  asg_name                = "${var.prefix}-${var.region}-${var.asg_name}-${var.env}"
-  sns_topic_name          = "${var.prefix}-${var.region}-${var.sns_topic_name}-${var.env}"
-  autoscaling_policy_name = "${var.prefix}-${var.region}-${var.autoscaling_policy_name}-${var.env}"
+  cp_ec2_name                      = "${var.prefix}-${var.region}-${var.cp_instance_name}-${var.env}"
+  launch_template_name             = "${var.prefix}-${var.region}-${var.launch_template_name}-${var.env}"
+  wn_ec2_name                      = "${var.prefix}-${var.region}-${var.wn_instance_name}-${var.env}"
+  asg_name                         = "${var.prefix}-${var.region}-${var.asg_name}-${var.env}"
+  sns_topic_name                   = "${var.prefix}-${var.region}-${var.sns_topic_name}-${var.env}"
+  autoscaling_policy_name          = "${var.prefix}-${var.region}-${var.autoscaling_policy_name}-${var.env}"
+  join_secret_name                 = "${var.prefix}/${var.region}/${var.join_secret_name}/${var.env}"
+  kube_config_secret_name          = "${var.prefix}/${var.region}/${var.kube_config_secret_name}/${var.env}"
+  kube_dashboard_token_secret_name = "${var.prefix}/${var.region}/${var.kube_dashboard_token_secret_name}/${var.env}"
+  join_tags = merge(
+    {
+      Name = local.join_secret_name
+    },
+    var.tags
+  )
+  config_tags = merge(
+    {
+      Name = local.kube_config_secret_name
+    },
+    var.tags
+  )
+  dashboard_tags = merge(
+    {
+      Name = local.kube_dashboard_token_secret_name
+    },
+    var.tags
+  )
+  aws_cli_join_tags = join(" ", [
+    for key, value in local.join_tags : "Key=${key},Value=${tostring(value)}"
+  ])
+  aws_cli_config_tags = join(" ", [
+    for key, value in local.config_tags : "Key=${key},Value=${tostring(value)}"
+  ])
+  aws_cli_dashboard_tags = join(" ", [
+    for key, value in local.dashboard_tags : "Key=${key},Value=${tostring(value)}"
+  ])
   # Using a template to dynamically generate the userdata deployment script
   cp_user_data = templatefile("${path.module}/cp_bootstrap.sh.tftpl", {
     aws_region                       = var.region
     k8s_version                      = var.k8s_version
     cluster_name                     = var.cluster_name
-    join_secret_name                 = var.join_secret_name
-    kube_config_secret_name          = var.kube_config_secret_name
-    kube_dashboard_token_secret_name = var.kube_dashboard_token_secret_name
+    join_secret_name                 = local.join_secret_name
+    join_secret_tags                 = local.aws_cli_join_tags
+    kube_config_secret_name          = local.kube_config_secret_name
+    kube_config_secret_tags          = local.aws_cli_config_tags
+    kube_dashboard_token_secret_name = local.kube_dashboard_token_secret_name
+    kube_dashboard_token_secret_tags = local.aws_cli_dashboard_tags
   })
   wn_user_data = templatefile("${path.module}/wn_bootstrap.sh.tftpl", {
     aws_region       = var.region
     k8s_version      = var.k8s_version
-    join_secret_name = var.join_secret_name
+    join_secret_name = local.join_secret_name
   })
 }
 
