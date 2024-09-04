@@ -11,7 +11,7 @@ output "certificate_body" {
 }
 
 output "certificate_key" {
-  value = aws_acm_certificate.acm_cert.private_key
+  value     = aws_acm_certificate.acm_cert.private_key
   sensitive = true
 }
 

@@ -41,9 +41,9 @@ resource "aws_iam_policy" "iam_create_secret_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Sid      = "CreateAndReadOnlySecret",
-        Effect   = "Allow",
-        Action   = [
+        Sid    = "CreateAndReadOnlySecret",
+        Effect = "Allow",
+        Action = [
           "secretsmanager:CreateSecret",
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret",
