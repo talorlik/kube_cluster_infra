@@ -157,6 +157,11 @@
     - name: Apply the Ingress resource
       command: kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
 
+    - name: Install community.aws collection
+      ansible.builtin.ansible-galaxy:
+        name: community.aws
+        type: collection
+
     - name: Wait for the ALB to be created and active
       community.aws.ec2_elb_info:
         names:

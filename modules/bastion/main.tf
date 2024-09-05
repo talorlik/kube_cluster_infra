@@ -44,12 +44,14 @@ resource "aws_iam_policy" "ssm_policy" {
           "ssm:StartSession",
           "ssm:DescribeSessions",
           "ssm:GetConnectionStatus",
-          "ssm:DescribeInstanceInformation"
+          "ssm:DescribeInstanceInformation",
+          "ssm:TerminateSession"
         ],
         Resource = [
           "arn:aws:ssm:*:*:document/SSM-SessionManagerRunShell",
           "arn:aws:ssm:*:*:document/AWS-StartSSHSession",
-          "arn:aws:ec2:*:*:instance/*"
+          "arn:aws:ec2:*:*:instance/*",
+          "arn:aws:ssm:*:*:session/*"
         ]
       },
       {
