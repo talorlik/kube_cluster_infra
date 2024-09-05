@@ -205,7 +205,7 @@ jobs:
       - name: Install Ansible and boto3
         run: |
           python -m pip install --upgrade pip
-          pip install ansible ansible-base boto3
+          python -m pip install --upgrade ansible ansible-base boto3
           ansible-galaxy collection install community.aws
 
       - name: Download Control Plane SSH key
