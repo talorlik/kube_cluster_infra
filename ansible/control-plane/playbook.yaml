@@ -16,11 +16,6 @@
         alb_name: "{{ lookup('env', 'ALB_NAME') }}"
         alb_tags: "{{ lookup('env', 'ALB_TAGS') }}"
 
-    - name: Install community.aws collection
-      ansible.builtin.ansible-galaxy:
-        name: community.aws
-        type: collection
-
     - name: Ensure all nodes are ready and there are at least two nodes
       shell: |
         ready_nodes=$(kubectl get nodes --no-headers | grep ' Ready' | wc -l)
@@ -162,33 +157,49 @@
     - name: Apply the Ingress resource
       command: kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
 
-    - name: Wait for the ALB to be created and active
-      community.aws.ec2_elb_info:
-        names:
-          - "{{ alb_name }}"
-      register: alb_info
+    - name: Wait for the ALB to be created and active using AWS CLI
+      shell: |
+        while [[ $(aws elbv2 describe-load-balancers --names "{{ alb_name }}" --query 'LoadBalancers[0].State.Code' --output text) != "active" ]]; do
+          echo "Waiting for ALB to become active..."
+          sleep 60
+        done
       retries: 20
       delay: 60
-      until: alb_info.load_balancers | length > 0 and alb_info.load_balancers[0].state == 'active'
 
-    - name: Set ALB DNS name and Zone ID facts
-      set_fact:
-        alb_dns_name: "{{ alb_info.load_balancers[0].dns_name }}"
-        alb_zone_id: "{{ alb_info.load_balancers[0].zone_id }}"
+    - name: Set ALB DNS name and Zone ID facts using AWS CLI
+      shell: |
+        alb_dns_name=$(aws elbv2 describe-load-balancers --names "{{ alb_name }}" --query 'LoadBalancers[0].DNSName' --output text)
+        alb_zone_id=$(aws elbv2 describe-load-balancers --names "{{ alb_name }}" --query 'LoadBalancers[0].CanonicalHostedZoneId' --output text)
+        echo "alb_dns_name=$alb_dns_name" >> /tmp/ansible_alb_facts
+        echo "alb_zone_id=$alb_zone_id" >> /tmp/ansible_alb_facts
+      register: alb_info
 
-    - name: Get Route53 Zone ID
-      community.aws.route53_zone_info:
-        query: public
-        name: "int-devops.click."
+    - name: Load ALB facts from temporary file
+      shell: |
+        source /tmp/ansible_alb_facts
+        echo "ALB DNS Name: $alb_dns_name"
+        echo "ALB Zone ID: $alb_zone_id"
+      register: alb_facts
+
+    - name: Get Route53 Zone ID using AWS CLI
+      shell: |
+        aws route53 list-hosted-zones-by-name --dns-name "int-devops.click." --query 'HostedZones[0].Id' --output text
       register: route53_zone_info
 
-    - name: Create Route53 A record for ALB
-      community.aws.route53:
-        zone: "{{ route53_zone_info.zones[0].id }}"
-        record: "{{ sub_domain_name }}"
-        type: A
-        alias:
-          name: "{{ alb_dns_name }}"
-          zone_id: "{{ alb_zone_id }}"
-          evaluate_target_health: false
-      when: route53_zone_info.zones | length > 0
+    - name: Create Route53 A record for ALB using AWS CLI
+      shell: |
+        aws route53 change-resource-record-sets --hosted-zone-id "{{ route53_zone_info.stdout }}" --change-batch '
+        {
+          "Changes": [{
+            "Action": "UPSERT",
+            "ResourceRecordSet": {
+              "Name": "{{ sub_domain_name }}",
+              "Type": "A",
+              "AliasTarget": {
+                "DNSName": "{{ alb_facts.alb_dns_name }}",
+                "HostedZoneId": "{{ alb_facts.alb_zone_id }}",
+                "EvaluateTargetHealth": false
+              }
+            }
+          }]
+        }'
