@@ -16,6 +16,11 @@
         alb_name: "{{ lookup('env', 'ALB_NAME') }}"
         alb_tags: "{{ lookup('env', 'ALB_TAGS') }}"
 
+    - name: Install community.aws collection
+      ansible.builtin.ansible-galaxy:
+        name: community.aws
+        type: collection
+
     - name: Ensure all nodes are ready and there are at least two nodes
       shell: |
         ready_nodes=$(kubectl get nodes --no-headers | grep ' Ready' | wc -l)
@@ -156,11 +161,6 @@
 
     - name: Apply the Ingress resource
       command: kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
-
-    - name: Install community.aws collection
-      ansible.builtin.ansible-galaxy:
-        name: community.aws
-        type: collection
 
     - name: Wait for the ALB to be created and active
       community.aws.ec2_elb_info:
