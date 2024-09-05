@@ -47,6 +47,7 @@ resource "aws_iam_policy" "ssm_policy" {
           "ssm:DescribeInstanceInformation"
         ],
         Resource = [
+          "arn:aws:ssm:*:*:document/SSM-SessionManagerRunShell",
           "arn:aws:ssm:*:*:document/AWS-StartSSHSession",
           "arn:aws:ec2:*:*:instance/*"
         ]

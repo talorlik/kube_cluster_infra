@@ -3,9 +3,9 @@ regions:
   - us-east-1
   - us-east-2
 keyed_groups:
-  - key: tags["kubernetes.io/role/control-plane"]
+  - key: tags["node-role.kubernetes.io/control-plane"]
 filters:
-  "tag:kubernetes.io/role/control-plane": "1"
+  "tag:node-role.kubernetes.io/control-plane": "1"
   instance-state-name: running
 compose:
   ansible_host: private_ip_address
