@@ -95,16 +95,17 @@ alb_sg_ingress_rules = [
   }
 ]
 ### Kubernetes Cluster ###
+cluster_name     = "kube-cluster"
 cp_instance_type = "t3.medium"
 wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v1b"
-sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v1b"
-join_secret_name                 = "kubeadm/join-details"
-kube_config_secret_name          = "kube/config"
-kube_dashboard_token_secret_name = "kube/dashboard-token"
+sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v1c"
+sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v1c"
+join_secret_name                 = "kubeadm/join-details/v1"
+kube_config_secret_name          = "kube/config/v1"
+kube_dashboard_token_secret_name = "kube/dashboard-token/v1"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"

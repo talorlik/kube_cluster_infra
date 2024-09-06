@@ -14,15 +14,6 @@ locals {
   vpc_name                     = "${var.prefix}-${var.region}-vpc-${var.env}"
   igw_name                     = "${var.prefix}-${var.region}-igw-${var.env}"
   cluster_name                 = "${var.prefix}-${var.region}-${var.cluster_name}-${var.env}"
-  cp_iam_role_name             = "${var.prefix}-${var.region}-${var.cp_iam_role_name}-${var.env}"
-  wn_iam_role_name             = "${var.prefix}-${var.region}-${var.wn_iam_role_name}-${var.env}"
-  cp_iam_role_policy_name      = "${var.prefix}-${var.region}-${var.cp_iam_role_policy_name}-${var.env}"
-  wn_iam_role_policy_name      = "${var.prefix}-${var.region}-${var.wn_iam_role_policy_name}-${var.env}"
-  cp_iam_instance_profile_name = "${var.prefix}-${var.region}-${var.cp_iam_instance_profile_name}-${var.env}"
-  wn_iam_instance_profile_name = "${var.prefix}-${var.region}-${var.wn_iam_instance_profile_name}-${var.env}"
-  cp_sg_name                   = "${var.prefix}-${var.region}-${var.cp_sg_name}-${var.env}"
-  wn_sg_name                   = "${var.prefix}-${var.region}-${var.wn_sg_name}-${var.env}"
-  alb_sg_name                  = "${var.prefix}-${var.region}-${var.alb_sg_name}-${var.env}"
   azs                          = slice(data.aws_availability_zones.available.names, 0, 3)
   cp_azs                       = slice(local.azs, 0, 1)
   wn_azs                       = slice(local.azs, 1, 3)
@@ -67,10 +58,10 @@ module "cp_iam_role" {
   env                       = var.env
   region                    = var.region
   prefix                    = var.prefix
-  iam_role_name             = local.cp_iam_role_name
+  iam_role_name             = var.cp_iam_role_name
   assume_role_policy        = var.cp_iam_assume_role_policy
-  iam_role_policy_name      = local.cp_iam_role_policy_name
-  iam_instance_profile_name = local.cp_iam_instance_profile_name
+  iam_role_policy_name      = var.cp_iam_role_policy_name
+  iam_instance_profile_name = var.cp_iam_instance_profile_name
   tags                      = local.tags
 }
 
@@ -82,62 +73,11 @@ module "wn_iam_role" {
   env                       = var.env
   region                    = var.region
   prefix                    = var.prefix
-  iam_role_name             = local.wn_iam_role_name
+  iam_role_name             = var.wn_iam_role_name
   assume_role_policy        = var.wn_iam_assume_role_policy
-  iam_role_policy_name      = local.wn_iam_role_policy_name
-  iam_instance_profile_name = local.wn_iam_instance_profile_name
+  iam_role_policy_name      = var.wn_iam_role_policy_name
+  iam_instance_profile_name = var.wn_iam_instance_profile_name
   tags                      = local.tags
-}
-
-############# Bastion SSM Policy for cluster machines ##################
-resource "aws_iam_policy" "iam_ssm_policy" {
-  name = "${var.prefix}-${var.region}-cluster-ssm-iam-policy-${var.env}"
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "ssm:DescribeAssociation",
-          "ssm:GetDeployablePatchSnapshotForInstance",
-          "ssm:GetDocument",
-          "ssm:DescribeDocument",
-          "ssm:GetManifest",
-          "ssm:GetParameter",
-          "ssm:GetParameters",
-          "ssm:ListAssociations",
-          "ssm:ListInstanceAssociations",
-          "ssm:PutInventory",
-          "ssm:PutComplianceItems",
-          "ssm:PutConfigurePackageResult",
-          "ssm:UpdateAssociationStatus",
-          "ssm:UpdateInstanceAssociationStatus",
-          "ssm:UpdateInstanceInformation",
-          "ssmmessages:CreateControlChannel",
-          "ssmmessages:CreateDataChannel",
-          "ssmmessages:OpenControlChannel",
-          "ssmmessages:OpenDataChannel",
-          "ec2messages:AcknowledgeMessage",
-          "ec2messages:DeleteMessage",
-          "ec2messages:FailMessage",
-          "ec2messages:GetEndpoint",
-          "ec2messages:GetMessages",
-          "ec2messages:SendReply"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "cp_attach_ssm_policy" {
-  policy_arn = aws_iam_policy.iam_ssm_policy.arn
-  role       = module.cp_iam_role.iam_role_name
-}
-
-resource "aws_iam_role_policy_attachment" "wn_attach_ssm_policy" {
-  policy_arn = aws_iam_policy.iam_ssm_policy.arn
-  role       = module.wn_iam_role.iam_role_name
 }
 
 ############# Control Plane Security Group ##################
@@ -147,7 +87,7 @@ module "cp_sg" {
   env           = var.env
   region        = var.region
   prefix        = var.prefix
-  name          = local.cp_sg_name
+  name          = var.cp_sg_name
   vpc_id        = module.vpc.vpc_id
   ingress_rules = var.cp_sg_ingress_rules
   egress_rules  = var.cp_sg_egress_rules
@@ -166,7 +106,7 @@ module "wn_sg" {
   env           = var.env
   region        = var.region
   prefix        = var.prefix
-  name          = local.wn_sg_name
+  name          = var.wn_sg_name
   vpc_id        = module.vpc.vpc_id
   ingress_rules = var.wn_sg_ingress_rules
   egress_rules  = var.wn_sg_egress_rules
@@ -234,7 +174,7 @@ module "alb_sg" {
   env           = var.env
   region        = var.region
   prefix        = var.prefix
-  name          = local.alb_sg_name
+  name          = var.alb_sg_name
   vpc_id        = module.vpc.vpc_id
   ingress_rules = var.alb_sg_ingress_rules
   egress_rules  = []

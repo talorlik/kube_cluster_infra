@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# install jq, awscli and ecr-credentials-helper
 sudo -u ubuntu -i <<'EOF'
 
 # Function to check if a package is installed
@@ -162,6 +161,5 @@ done
 # Run the kubeadm join command
 $JOIN_COMMAND
 
-# Sample join command
-# sudo kubeadm join 172.31.95.35:6443 --token smbrii.v7cgfywdzgfnfet7 --discovery-token-ca-cert-hash sha256:8d105b88bcf22b61d034e16a1acfda2e8f8fad1604a6eb0bca7366efa1d5bcdd
+echo "Done bootstrapping Worker Node.\n"
 EOF

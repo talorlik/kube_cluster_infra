@@ -6,7 +6,7 @@ locals {
   key_name          = "${var.prefix}-${var.region}-bastion-key-pair-${var.env}"
   ec2_instance_name = "${var.prefix}-${var.region}-bastion-ec2-${var.env}"
   az                = element(var.azs, length(var.azs) - 1)
-  user_data         = templatefile("${path.module}/deploy.sh.tftpl", {})
+  user_data         = file("${path.module}/deploy.sh")
 }
 
 ############## IAM Role + Policy + Profile ################

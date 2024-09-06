@@ -170,7 +170,6 @@ variable "k8s_version" {
 variable "cluster_name" {
   description = "The Name of Kubernetes Cluster"
   type        = string
-  default     = "kube-cluster"
 }
 
 variable "cp_instance_type" {

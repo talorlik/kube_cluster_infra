@@ -3,6 +3,7 @@
   become: yes
   vars:
     ansible_user: ubuntu
+    ansible_connection: aws_ssm
   tasks:
     - name: Get values from environment
       set_fact:

@@ -63,7 +63,7 @@ resource "aws_instance" "cp_ec2" {
   key_name                    = var.cp_key_pair_name
   subnet_id                   = var.cp_private_subnets[0]
   iam_instance_profile        = var.cp_iam_instance_profile_name
-  user_data                   = local.cp_user_data
+  user_data                   = base64encode(local.cp_user_data)
   associate_public_ip_address = var.cp_associate_public_ip_address
   ebs_optimized               = true
 
@@ -94,7 +94,6 @@ resource "aws_launch_template" "launch_template" {
     name = var.wn_iam_instance_profile_name
   }
 
-  # vpc_security_group_ids = [aws_security_group.yolo5_ec2_sg.id]
   key_name               = var.wn_key_pair_name
   user_data              = base64encode(local.wn_user_data)
   ebs_optimized          = var.ebs_optimized

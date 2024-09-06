@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# install jq, awscli and ecr-credentials-helper
 sudo -u ubuntu -i <<'EOF'
 
 # Function to check if a package is installed
@@ -229,4 +228,6 @@ update_join_command() {
 
 # Add cron job to regenerate the join command every 23 hours
 (crontab -l 2>/dev/null; echo "0 */23 * * * $(which bash) -c 'update_join_command'") | crontab -
+
+echo "Done bootstrapping Control Plane.\n"
 EOF

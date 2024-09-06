@@ -8,5 +8,6 @@ filters:
   "tag:node-role.kubernetes.io/control-plane": "1"
   instance-state-name: running
 compose:
-  ansible_host: private_ip_address
+  ansible_host: instance_id
   ansible_user: ubuntu
+  ansible_connection: aws_ssm

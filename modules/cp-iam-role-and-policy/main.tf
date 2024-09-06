@@ -35,6 +35,11 @@ resource "aws_iam_role_policy_attachment" "iam-role-AmazonEC2ContainerRegistryRe
   role       = aws_iam_role.iam_role.name
 }
 
+resource "aws_iam_role_policy_attachment" "iam-role-AmazonSSMManagedInstanceCore" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  role       = aws_iam_role.iam_role.name
+}
+
 resource "aws_iam_policy" "iam_create_secret_policy" {
   name = local.iam_role_secret_policy_name
   policy = jsonencode({
