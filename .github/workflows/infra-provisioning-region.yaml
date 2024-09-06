@@ -248,4 +248,4 @@ jobs:
           ALB_TAGS: "Name=${{ needs.Terraform.outputs.prefix }}-${{ needs.SetRegion.outputs.region_code }}-alb-${{ inputs.environment }},Env=${{ inputs.environment }},Terraform=true,\"kubernetes.io/cluster/${{ needs.Terraform.outputs.cluster_name }}\"=owned"
         working-directory: ${{ github.workspace }}/ansible/control-plane
         run: |
-          ansible-playbook -i aws_ec2.yaml playbook.yaml --private-key ${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }}
+          ansible-playbook -i aws_ec2.yaml playbook.yaml --private-key ${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }} -vvv
