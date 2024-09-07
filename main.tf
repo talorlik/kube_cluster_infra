@@ -166,7 +166,7 @@ resource "aws_vpc_security_group_ingress_rule" "wn_allow_nodeport" {
   from_port         = 30000
   to_port           = 32767
   ip_protocol       = "tcp"
-  cidr_ipv4         = ["0.0.0.0/0"]
+  cidr_ipv4         = "0.0.0.0/0"
 }
 
 ################ ALB Security Group #####################
