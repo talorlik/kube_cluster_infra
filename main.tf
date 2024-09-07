@@ -11,13 +11,13 @@ module "ubuntu_24_04_latest" {
 }
 
 locals {
-  vpc_name                     = "${var.prefix}-${var.region}-vpc-${var.env}"
-  igw_name                     = "${var.prefix}-${var.region}-igw-${var.env}"
-  cluster_name                 = "${var.prefix}-${var.region}-${var.cluster_name}-${var.env}"
-  azs                          = slice(data.aws_availability_zones.available.names, 0, 3)
-  cp_azs                       = slice(local.azs, 0, 1)
-  wn_azs                       = slice(local.azs, 1, 3)
-  ami_id                       = module.ubuntu_24_04_latest.ami_id
+  vpc_name     = "${var.prefix}-${var.region}-vpc-${var.env}"
+  igw_name     = "${var.prefix}-${var.region}-igw-${var.env}"
+  cluster_name = "${var.prefix}-${var.region}-${var.cluster_name}-${var.env}"
+  azs          = slice(data.aws_availability_zones.available.names, 0, 3)
+  cp_azs       = slice(local.azs, 0, 1)
+  wn_azs       = slice(local.azs, 1, 3)
+  ami_id       = module.ubuntu_24_04_latest.ami_id
   tags = {
     Env       = var.env
     Terraform = true
@@ -302,8 +302,7 @@ module "secret_sub_domain_cert_key" {
 ################### ECR #######################
 
 module "ecr_and_policy" {
-  source = "./modules/ecr-and-policy"
-
+  source               = "./modules/ecr-and-policy"
   env                  = var.env
   region               = var.region
   prefix               = var.prefix
@@ -311,4 +310,14 @@ module "ecr_and_policy" {
   image_tag_mutability = var.image_tag_mutability
   policy               = jsonencode(var.ecr_lifecycle_policy)
   tags                 = local.tags
+}
+
+############### S3 Ansible SSM ###################
+
+module "s3_ansible_ssm" {
+  source = "./modules/s3-ansible-ssm"
+  env    = var.env
+  region = var.region
+  prefix = var.prefix
+  tags   = local.tags
 }

@@ -193,3 +193,13 @@ output "bastion_pem_file_path" {
 output "cluster_name" {
   value = local.cluster_name
 }
+
+############ S3 Ansible SSM ################
+
+output "s3_ansible_ssm_name" {
+  value = module.s3_ansible_ssm.name
+}
+
+output "s3_ansible_ssm_arn" {
+  value = module.s3_ansible_ssm.arn
+}

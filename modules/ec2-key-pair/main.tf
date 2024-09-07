@@ -20,5 +20,10 @@ resource "local_file" "public_key" {
 resource "aws_key_pair" "ec2_key_pair" {
   key_name   = local.name
   public_key = tls_private_key.talo_tls_private_key.public_key_openssh
-  tags       = var.tags
+  tags = merge(
+    {
+      Name = local.name
+    },
+    var.tags
+  )
 }

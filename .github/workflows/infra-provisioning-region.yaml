@@ -72,6 +72,7 @@ jobs:
       alb_sg_id: ${{ steps.tf_output.outputs.alb_sg_id }}
       prefix: ${{ steps.tf_output.outputs.prefix }}
       cluster_name: ${{ steps.tf_output.outputs.cluster_name }}
+      s3_ansible_ssm_name: ${{ steps.tf_output.outputs.s3_ansible_ssm_name }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -145,6 +146,7 @@ jobs:
           echo "alb_sg_id=$(terraform output -raw alb_sg_id)" >> $GITHUB_OUTPUT
           echo "prefix=$(terraform output -raw prefix)" >> $GITHUB_OUTPUT
           echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
+          echo "s3_ansible_ssm_name=$(terraform output -raw s3_ansible_ssm_name)" >> $GITHUB_OUTPUT
 
           terraform output -json > ${{ github.workspace }}/${{ env.OUTPUTS_ARTIFACT_NAME }}
 
@@ -227,6 +229,11 @@ jobs:
 
       - name: Checkout the repo code
         uses: actions/checkout@v2
+
+      - name: Replace placeholder with S3 bucket name for SSM
+        run: |
+          sed -i "s/REPLACE_WITH_BUCKET_NAME/${{ needs.Terraform.outputs.s3_ansible_ssm_name }}/g" playbook.yaml
+        working-directory: ${{ github.workspace }}/ansible/control-plane
 
       - name: Run Ansible Playbook
         env:

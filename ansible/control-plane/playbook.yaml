@@ -2,8 +2,10 @@
   hosts: all
   become: yes
   vars:
+    become_user: ubuntu
     ansible_user: ubuntu
     ansible_connection: aws_ssm
+    ansible_aws_ssm_bucket_name: REPLACE_WITH_BUCKET_NAME
   tasks:
     - name: Get values from environment
       set_fact:
