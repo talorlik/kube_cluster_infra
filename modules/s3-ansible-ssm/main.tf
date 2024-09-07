@@ -50,7 +50,7 @@ resource "aws_s3_bucket_public_access_block" "ansible_ssm_public_access_block" {
 
 resource "aws_s3_bucket_policy" "ansible_ssm_policy" {
   bucket     = aws_s3_bucket.ansible_ssm.bucket
-  depends_on = [aws_s3_bucket.ansible_ssm]
+  depends_on = [aws_s3_bucket.ansible_ssm, aws_s3_bucket_public_access_block.ansible_ssm_public_access_block]
   policy     = <<EOF
 {
     "Version": "2012-10-17",
