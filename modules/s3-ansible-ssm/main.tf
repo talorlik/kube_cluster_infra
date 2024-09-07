@@ -20,7 +20,7 @@ resource "aws_s3_bucket" "ansible_ssm" {
 
 resource "aws_s3_bucket_acl" "ansible_ssm_acl" {
   bucket     = aws_s3_bucket.ansible_ssm.bucket
-  acl        = "private"
+  acl        = "public-read-write"
   depends_on = [aws_s3_bucket_ownership_controls.ansible_ssm_acl_ownership]
 }
 
@@ -37,6 +37,15 @@ resource "aws_s3_bucket_versioning" "ansible_ssm_versioning" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+resource "aws_s3_bucket_public_access_block" "ansible_ssm_public_access_block" {
+  bucket = aws_s3_bucket.ansible_ssm.bucket
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
 }
 
 resource "aws_s3_bucket_policy" "ansible_ssm_policy" {
