@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 sudo -u ubuntu -i <<'EOF'
 
@@ -55,5 +56,5 @@ curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64
 
 sudo dpkg -i session-manager-plugin.deb
 
-echo "Done bootstrapping Bastion.\n"
+echo -e "Done bootstrapping Bastion.\n"
 EOF

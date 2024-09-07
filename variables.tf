@@ -162,9 +162,8 @@ variable "wn_key_pair_name" {
 ############ Kubernetes Cluster #################
 
 variable "k8s_version" {
-  description = "The version of Kubernetes to deploy. Defaults to v1.30."
+  description = "The version of Kubernetes to deploy."
   type        = string
-  default     = "v1.30"
 }
 
 variable "cluster_name" {

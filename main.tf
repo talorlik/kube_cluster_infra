@@ -119,52 +119,54 @@ module "wn_sg" {
 }
 
 ########## Additional rules for Security Groups ##########
-resource "aws_vpc_security_group_ingress_rule" "control_plane_allow_all_from_worker_nodes_tcp" {
+################### Control Plane ########################
+resource "aws_vpc_security_group_ingress_rule" "cp_allow_api_from_wn" {
   security_group_id            = module.cp_sg.id
-  from_port                    = 0
-  to_port                      = 65535
+  from_port                    = 6443
+  to_port                      = 6443
   ip_protocol                  = "tcp"
   referenced_security_group_id = module.wn_sg.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "control_plane_allow_all_from_worker_nodes_udp" {
+resource "aws_vpc_security_group_ingress_rule" "cp_allow_etcd_from_wn" {
   security_group_id            = module.cp_sg.id
-  from_port                    = 0
-  to_port                      = 65535
-  ip_protocol                  = "udp"
+  from_port                    = 2379
+  to_port                      = 2380
+  ip_protocol                  = "tcp"
   referenced_security_group_id = module.wn_sg.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "worker_nodes_allow_all_from_control_plane_tcp" {
+resource "aws_vpc_security_group_ingress_rule" "cp_allow_kubelet_from_wn" {
+  security_group_id            = module.cp_sg.id
+  from_port                    = 10250
+  to_port                      = 10250
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = module.wn_sg.id
+}
+
+################### Worker Nodes ########################
+resource "aws_vpc_security_group_ingress_rule" "wn_allow_kubelet_from_cp" {
   security_group_id            = module.wn_sg.id
-  from_port                    = 0
-  to_port                      = 65535
+  from_port                    = 10250
+  to_port                      = 10250
   ip_protocol                  = "tcp"
   referenced_security_group_id = module.cp_sg.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "worker_nodes_allow_all_from_control_plane_udp" {
+resource "aws_vpc_security_group_ingress_rule" "wn_allow_flannel_vxlan_from_wn" {
   security_group_id            = module.wn_sg.id
-  from_port                    = 0
-  to_port                      = 65535
+  from_port                    = 8472
+  to_port                      = 8472
   ip_protocol                  = "udp"
-  referenced_security_group_id = module.cp_sg.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "worker_nodes_allow_all_from_worker_nodes_tcp" {
-  security_group_id            = module.wn_sg.id
-  from_port                    = 0
-  to_port                      = 65535
-  ip_protocol                  = "tcp"
   referenced_security_group_id = module.wn_sg.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "worker_nodes_allow_all_from_worker_nodes_udp" {
-  security_group_id            = module.wn_sg.id
-  from_port                    = 0
-  to_port                      = 65535
-  ip_protocol                  = "udp"
-  referenced_security_group_id = module.wn_sg.id
+resource "aws_vpc_security_group_ingress_rule" "wn_allow_nodeport" {
+  security_group_id = module.wn_sg.id
+  from_port         = 30000
+  to_port           = 32767
+  ip_protocol       = "tcp"
+  cidr_ipv4         = ["0.0.0.0/0"]
 }
 
 ################ ALB Security Group #####################

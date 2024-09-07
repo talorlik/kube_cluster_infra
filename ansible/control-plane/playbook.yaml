@@ -4,6 +4,7 @@
   vars:
     ansible_user: ubuntu
     ansible_connection: aws_ssm
+    ansible_ssm_use_s3: false
   tasks:
     - name: Get values from environment
       set_fact:

@@ -1,54 +1,36 @@
 #!/bin/bash
+set -euo pipefail
 
 sudo -u ubuntu -i <<'EOF'
 
 # Function to check if a package is installed
 is_installed() {
-    dpkg -l | grep -q "^ii  $1"
+  dpkg -l | grep -q "^ii  $1"
 }
 
 # Function to install a package if it is not installed
 install_if_missing() {
-    if ! is_installed "$1"; then
-        echo "Installing $1..."
-        sudo apt-get install -y "$1"
-    else
-        echo "$1 is already installed."
-    fi
+  if ! is_installed "$1"; then
+    echo "Installing $1..."
+      sudo apt-get install -y "$1"
+  else
+    echo "$1 is already installed."
+  fi
 }
 
 sudo apt-get update
 
 # Packages to check and install
 for package in libc6 groff less unzip curl ca-certificates gnupg gpg jq software-properties-common apt-transport-https; do
-    install_if_missing "$package"
+  install_if_missing "$package"
 done
 
 # Check if AWS CLI is installed and if not install and verify it
 if ! command -v aws &> /dev/null; then
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    if [ $? -ne 0 ]; then
-        echo "Failed to download AWS CLI"
-        exit 1
-    fi
-
-    unzip awscliv2.zip
-    if [ $? -ne 0 ]; then
-        echo "Failed to unzip AWS CLI"
-        exit 1
-    fi
-
-    sudo ./aws/install
-    if [ $? -ne 0 ]; then
-        echo "Failed to install AWS CLI"
-        exit 1
-    fi
-
-    aws --version
-    if [ $? -ne 0 ]; then
-        echo "AWS CLI installation verification failed"
-        exit 1
-    fi
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  unzip awscliv2.zip
+  sudo ./aws/install
+  aws --version
 fi
 
 # sysctl params required by setup, params persist across reboots
@@ -83,10 +65,10 @@ KUBELET_DEFAULTS_FILE="/etc/default/kubelet"
 EXTRA_ARGS="--cloud-provider=external --image-credential-provider-bin-dir=/usr/local/bin/ --image-credential-provider-config=/etc/kubernetes/ecr-credential-provider-config.yaml"
 if grep -q "KUBELET_EXTRA_ARGS" "$KUBELET_DEFAULTS_FILE"; then
   if ! grep -q -- "$EXTRA_ARGS" "$KUBELET_DEFAULTS_FILE"; then
-      echo "$(cat $KUBELET_DEFAULTS_FILE)\"$EXTRA_ARGS\"" | sudo tee "$KUBELET_DEFAULTS_FILE"
+    echo "$(sudo cat $KUBELET_DEFAULTS_FILE)\"$EXTRA_ARGS\"" | sudo tee "$KUBELET_DEFAULTS_FILE"
   fi
 else
-    echo "KUBELET_EXTRA_ARGS=\"$EXTRA_ARGS\"" | sudo tee "$KUBELET_DEFAULTS_FILE"
+  echo "KUBELET_EXTRA_ARGS=\"$EXTRA_ARGS\"" | sudo tee "$KUBELET_DEFAULTS_FILE"
 fi
 
 # create CredentialProviderConfig for ECR users
@@ -114,31 +96,18 @@ sudo swapoff -a
 
 # Check if the module is loaded
 if ! lsmod | grep -q br_netfilter; then
-    echo "br_netfilter module is not loaded. Loading it now..."
-    sudo modprobe br_netfilter
+  echo "br_netfilter module is not loaded. Loading it now..."
+  sudo modprobe br_netfilter
 
-    # Verify that the module was loaded successfully
-    if lsmod | grep -q br_netfilter; then
-        echo "br_netfilter module loaded successfully."
-    else
-        echo "Failed to load br_netfilter module."
-    fi
+  # Verify that the module was loaded successfully
+  if lsmod | grep -q br_netfilter; then
+    echo "br_netfilter module loaded successfully."
+  else
+    echo "Failed to load br_netfilter module."
+  fi
 else
-    echo "br_netfilter module is already loaded."
+  echo "br_netfilter module is already loaded."
 fi
-
-# Make sure SSM Agent is installed and running to allow connection to it from the Bastion machine
-if ! command -v amazon-ssm-agent &> /dev/null
-then
-    echo "SSM Agent not found. Installing..."
-    sudo apt-get install -y amazon-ssm-agent
-else
-    echo "SSM Agent already installed."
-fi
-
-# Ensure SSM Agent is running
-sudo systemctl enable amazon-ssm-agent
-sudo systemctl start amazon-ssm-agent
 
 # Function to fetch the join command from Secrets Manager
 fetch_join_command() {
@@ -161,5 +130,5 @@ done
 # Run the kubeadm join command
 $JOIN_COMMAND
 
-echo "Done bootstrapping Worker Node.\n"
+echo -e "Done bootstrapping Worker Node.\n"
 EOF

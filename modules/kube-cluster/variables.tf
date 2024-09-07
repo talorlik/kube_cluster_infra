@@ -15,7 +15,7 @@ variable "prefix" {
 }
 
 variable "k8s_version" {
-  description = "The version of Kubernetes to deploy. Defaults to v1.30."
+  description = "The version of Kubernetes to deploy."
   type        = string
 }
 
