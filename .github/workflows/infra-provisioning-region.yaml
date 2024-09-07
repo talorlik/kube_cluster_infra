@@ -233,6 +233,7 @@ jobs:
       - name: Replace placeholder with S3 bucket name for SSM
         run: |
           sed -i "s/REPLACE_WITH_BUCKET_NAME/${{ needs.Terraform.outputs.s3_ansible_ssm_name }}/g" playbook.yaml
+          sed -i "s/REPLACE_WITH_REGION/${{ needs.SetRegion.outputs.region_code }}/g" playbook.yaml
         working-directory: ${{ github.workspace }}/ansible/control-plane
 
       - name: Run Ansible Playbook
