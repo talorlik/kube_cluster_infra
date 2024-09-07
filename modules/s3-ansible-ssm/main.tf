@@ -56,9 +56,7 @@ resource "aws_s3_bucket_policy" "ansible_ssm_policy" {
                 "s3:DeleteObject",
                 "s3:GetBucketLocation"
             ],
-			"Principal": {
- 			  "AWS": "*"
- 		    },
+			"Principal": "*",
 			"Resource": [
                 "arn:aws:s3:::${aws_s3_bucket.ansible_ssm.bucket}",
                 "arn:aws:s3:::${aws_s3_bucket.ansible_ssm.bucket}/*"
