@@ -207,10 +207,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade ansible boto3
 
-      - name: Install Ansible AWS Collections
-        run: |
-          ansible-galaxy collection install amazon.aws
-          ansible-galaxy collection install community.aws
+      # - name: Install Ansible AWS Collections
+      #   run: |
+      #     ansible-galaxy collection install amazon.aws
+      #     ansible-galaxy collection install community.aws
 
       - name: Download Control Plane SSH key
         uses: actions/download-artifact@v4
