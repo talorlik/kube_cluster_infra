@@ -4,9 +4,9 @@
   become: yes
   remote_user: ubuntu
   vars:
-    bastion_ip: "{{ hostvars['bastion'][0].public_ip_address }}"
-    control_plane_key: "{{ control_plane_key }}"
-    bastion_key: "{{ bastion_key }}"
+    bastion_ip: "{{ hostvars[groups['bastion'][0]].public_ip_address }}"
+    control_plane_key: "{{ lookup('env', 'CP_KEY') }}"
+    bastion_key: "{{ lookup('env', 'BASTION_KEY') }}"
   tasks:
     - name: Configure dynamic bastion host proxy for SSH
       set_fact:

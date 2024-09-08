@@ -244,6 +244,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ needs.SetRegion.outputs.region_code }}
+          CP_KEY: "${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }}"
+          BASTION_KEY: "${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}"
           CERTIFICATE_ARN: ${{ needs.Terraform.outputs.certificate_arn }}
           CERTIFICATE_BODY_SECRET_NAME: ${{ needs.Terraform.outputs.sub_domain_cert_body_secret_name }}
           CERTIFICATE_KEY_SECRET_NAME: ${{ needs.Terraform.outputs.sub_domain_cert_key_secret_name }}
@@ -253,4 +255,4 @@ jobs:
           ALB_TAGS: "Name=${{ needs.Terraform.outputs.prefix }}-${{ needs.SetRegion.outputs.region_code }}-alb-${{ inputs.environment }},Env=${{ inputs.environment }},Terraform=true,\"kubernetes.io/cluster/${{ needs.Terraform.outputs.cluster_name }}\"=owned"
         working-directory: ${{ github.workspace }}/ansible/control-plane
         run: |
-          ansible-playbook -i aws_ec2.yaml playbook.yaml --extra-vars "control_plane_key=${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }} bastion_key=${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}" -vvv
+          ansible-playbook -i aws_ec2.yaml playbook.yaml -vvv
