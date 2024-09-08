@@ -1,18 +1,16 @@
 - name: Control Plane EC2s
   hosts: all
   become: yes
-  become_user: ubuntu
-  become_method: su
+  remote_user: ubuntu
   vars:
-    ansible_remote_tmp: /tmp/.ansible/tmp
     ansible_connection: aws_ssm
     ansible_aws_ssm_bucket_name: REPLACE_WITH_BUCKET_NAME
     ansible_aws_ssm_region: REPLACE_WITH_REGION
   pre_tasks:
-    - name: Set permissions for /tmp/.ansible as root
+    - name: Set permissions for /var/tmp for ubuntu user
       become: yes
       become_user: root
-      command: chmod -R 777 /tmp/.ansible
+      command: chmod -R 777 /var/tmp
   tasks:
     - name: Get values from environment
       set_fact:
