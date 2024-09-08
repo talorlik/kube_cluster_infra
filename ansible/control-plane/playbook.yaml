@@ -12,6 +12,8 @@
       set_fact:
         ansible_ssh_common_args: >-
           -o ProxyCommand="ssh -W %h:%p -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
+          -o UserKnownHostsFile=/dev/null
+          -o StrictHostKeyChecking=no
 
     - name: Test connection to Control Plane
       command: uptime
