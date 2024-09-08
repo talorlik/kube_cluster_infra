@@ -76,6 +76,7 @@ resource "aws_instance" "cp_ec2" {
   tags = merge(
     {
       Name                                        = local.cp_ec2_name
+      SSH                                         = "control_plane"
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
       "node-role.kubernetes.io/control-plane"     = 1
     },

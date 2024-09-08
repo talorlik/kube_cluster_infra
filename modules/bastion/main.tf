@@ -151,6 +151,7 @@ resource "aws_instance" "cp_ec2" {
   tags = merge(
     {
       Name = local.ec2_instance_name
+      SSH  = "bastion"
     },
     var.tags
   )
