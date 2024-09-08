@@ -11,9 +11,10 @@
     - name: Configure dynamic bastion host proxy for SSH
       set_fact:
         ansible_ssh_common_args: >-
-          -o ProxyCommand="ssh -W %h:%p -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
+          -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
           -o UserKnownHostsFile=/dev/null
           -o StrictHostKeyChecking=no
+          -o LogLevel=DEBUG
 
     - name: Test connection to Control Plane
       command: uptime
