@@ -7,10 +7,8 @@
     ansible_aws_ssm_bucket_name: REPLACE_WITH_BUCKET_NAME
     ansible_aws_ssm_region: REPLACE_WITH_REGION
   pre_tasks:
-    - name: Set permissions for /var/tmp for ubuntu user
-      become: yes
-      become_user: root
-      command: chmod -R 777 $HOME/.ansible/tmp
+    - name: Set permissions for /tmp/.ansible for ubuntu user
+      command: chmod -R 777 /tmp/.ansible
   tasks:
     - name: Get values from environment
       set_fact:
