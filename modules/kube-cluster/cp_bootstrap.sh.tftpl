@@ -139,7 +139,9 @@ JOIN_COMMAND="sudo $(echo "$KUBEADM_OUTPUT" | grep -A 2 "kubeadm join" | tail -n
 # Config kubectl
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
+sudo chown -R ubuntu:ubuntu $HOME/.kube
+sudo chmod 700 $HOME/.kube
+sudo chmod 600 $HOME/.kube/config
 
 # Store the full join command as a secret in AWS Secrets Manager
 aws secretsmanager create-secret --name ${join_secret_name} --secret-string "$JOIN_COMMAND" --region ${aws_region} --tags ${join_secret_tags}
