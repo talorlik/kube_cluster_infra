@@ -10,7 +10,7 @@
     - name: Set permissions for /var/tmp for ubuntu user
       become: yes
       become_user: root
-      command: chmod -R 777 /var/tmp
+      command: chmod -R 777 $HOME/.ansible/tmp
   tasks:
     - name: Get values from environment
       set_fact:
