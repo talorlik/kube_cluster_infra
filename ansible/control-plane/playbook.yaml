@@ -2,6 +2,7 @@
   hosts: all
   become: yes
   become_user: ubuntu
+  become_method: su
   remote_user: ubuntu
   vars:
     ansible_connection: aws_ssm
