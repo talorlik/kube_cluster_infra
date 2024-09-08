@@ -25,6 +25,7 @@
 
     - name: Ensure all nodes are ready and there are at least two nodes
       shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
         ready_nodes=$(kubectl get nodes --no-headers | grep ' Ready' | wc -l)
         total_nodes=$(kubectl get nodes --no-headers | wc -l)
         if [ "$ready_nodes" -ge 2 ] && [ "$ready_nodes" -eq "$total_nodes" ]; then
@@ -39,6 +40,7 @@
 
     - name: Ensure kube-system pods are ready
       shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
         running_pods=$(kubectl get pods -n kube-system --no-headers | grep ' Running' | wc -l)
         total_pods=$(kubectl get pods -n kube-system --no-headers | wc -l)
         if [ "$running_pods" -eq "$total_pods" ]; then
@@ -52,16 +54,24 @@
       until: pods_check.rc == 0
 
     - name: Install Container Network Interface (CNI) - Flannel
-      command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+      shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
+        kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 
     - name: Install AWS Cloud Controller Manager
-      command: kubectl apply -k 'github.com/kubernetes/cloud-provider-aws/examples/existing-cluster/base/?ref=master'
+      shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
+        kubectl apply -k 'github.com/kubernetes/cloud-provider-aws/examples/existing-cluster/base/?ref=master'
 
     - name: Add helm repository for EBS CSI driver
-      command: helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+      shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
+        helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
 
     - name: Update helm repositories
-      command: helm repo update
+      shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
+        helm repo update
 
     - name: Create EBS CSI driver values file
       become: yes
@@ -82,17 +92,23 @@
 
     - name: Install EBS CSI driver using helm
       shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
         sudo chown ubuntu:ubuntu /etc/kubernetes/ebs-csi-values.yaml
         helm upgrade --install aws-ebs-csi-driver -f /etc/kubernetes/ebs-csi-values.yaml -n kube-system aws-ebs-csi-driver/aws-ebs-csi-driver
 
     - name: Add helm repository for nginx ingress controller
-      command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+      shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
+        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 
     - name: Update helm repositories (nginx-ingress)
-      command: helm repo update
+      shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
+        helm repo update
 
     - name: Install nginx-ingress-controller with NodePort service type
-      command: >
+      shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
         helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
         --namespace ingress-nginx
         --create-namespace
@@ -100,7 +116,8 @@
         --set controller.service.nodePorts.https=8443
 
     - name: Create the TLS secret using the certificate body and key saved in AWS Secrets Manager
-      command: >
+      shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
         kubectl create secret tls tls-secret
         --namespace ingress-nginx
         --cert=<(aws secretsmanager get-secret-value --secret-id "{{ certificate_body_secret_name }}" --query SecretString --output text)
@@ -169,6 +186,7 @@
 
     - name: Apply the Ingress resource
       shell: |
+        export KUBECONFIG=/home/ubuntu/.kube/config
         sudo chown ubuntu:ubuntu /etc/kubernetes/alb-ingress-connect-nginx.yaml
         kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
 
