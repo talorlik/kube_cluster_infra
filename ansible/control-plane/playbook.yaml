@@ -4,7 +4,7 @@
   become: yes
   remote_user: ubuntu
   vars:
-    bastion_ip: "{{ hostvars[groups['bastion'][0]].public_ip_address }}"
+    bastion_ip: "{{ hostvars['bastion'].public_ip_address }}"
     control_plane_key: "{{ lookup('env', 'CP_KEY') }}"
     bastion_key: "{{ lookup('env', 'BASTION_KEY') }}"
   tasks:
