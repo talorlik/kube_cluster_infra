@@ -1,7 +1,6 @@
 - name: Control Plane EC2s
   hosts: all
   become: yes
-  become_user: ubuntu
   vars:
     ansible_remote_tmp: /tmp/.ansible/tmp
     ansible_connection: aws_ssm
@@ -9,6 +8,8 @@
     ansible_aws_ssm_region: REPLACE_WITH_REGION
   tasks:
     - name: Get values from environment
+      become: yes
+      become_user: ubuntu
       set_fact:
         aws_account: "{{ lookup('env', 'AWS_ACCOUNT') }}"
         aws_region: "{{ lookup('env', 'AWS_REGION') }}"
@@ -21,6 +22,8 @@
         alb_tags: "{{ lookup('env', 'ALB_TAGS') }}"
 
     - name: Ensure all nodes are ready and there are at least two nodes
+      become: yes
+      become_user: ubuntu
       shell: |
         ready_nodes=$(kubectl get nodes --no-headers | grep ' Ready' | wc -l)
         total_nodes=$(kubectl get nodes --no-headers | wc -l)
@@ -35,6 +38,8 @@
       until: nodes_check.rc == 0
 
     - name: Ensure kube-system pods are ready
+      become: yes
+      become_user: ubuntu
       shell: |
         running_pods=$(kubectl get pods -n kube-system --no-headers | grep ' Running' | wc -l)
         total_pods=$(kubectl get pods -n kube-system --no-headers | wc -l)
@@ -49,18 +54,26 @@
       until: pods_check.rc == 0
 
     - name: Install Container Network Interface (CNI) - Flannel
+      become: yes
+      become_user: ubuntu
       command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 
     - name: Install AWS Cloud Controller Manager
+      become: yes
+      become_user: ubuntu
       command: kubectl apply -k 'github.com/kubernetes/cloud-provider-aws/examples/existing-cluster/base/?ref=master'
 
     - name: Add helm repository for EBS CSI driver
+      become: yes
+      become_user: ubuntu
       command: helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
 
     - name: Update helm repositories
       command: helm repo update
 
     - name: Create EBS CSI driver values file
+      become: yes
+      become_user: ubuntu
       copy:
         content: |
           storageClasses:
@@ -76,15 +89,23 @@
         dest: /etc/kubernetes/ebs-csi-values.yaml
 
     - name: Install EBS CSI driver using helm
+      become: yes
+      become_user: ubuntu
       command: helm upgrade --install aws-ebs-csi-driver -f /etc/kubernetes/ebs-csi-values.yaml -n kube-system aws-ebs-csi-driver/aws-ebs-csi-driver
 
     - name: Add helm repository for nginx ingress controller
+      become: yes
+      become_user: ubuntu
       command: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 
     - name: Update helm repositories (nginx-ingress)
+      become: yes
+      become_user: ubuntu
       command: helm repo update
 
     - name: Install nginx-ingress-controller with NodePort service type
+      become: yes
+      become_user: ubuntu
       command: >
         helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
         --namespace ingress-nginx
@@ -93,6 +114,8 @@
         --set controller.service.nodePorts.https=8443
 
     - name: Create the TLS secret using the certificate body and key saved in AWS Secrets Manager
+      become: yes
+      become_user: ubuntu
       command: >
         kubectl create secret tls tls-secret
         --namespace ingress-nginx
@@ -100,6 +123,8 @@
         --key=<(aws secretsmanager get-secret-value --secret-id "{{ certificate_key_secret_name }}" --query SecretString --output text)
 
     - name: Create the Ingress resource with ALB configuration
+      become: yes
+      become_user: root
       copy:
         content: |
           apiVersion: networking.k8s.io/v1
@@ -159,9 +184,15 @@
         dest: /etc/kubernetes/alb-ingress-connect-nginx.yaml
 
     - name: Apply the Ingress resource
-      command: kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
+      become: yes
+      become_user: ubuntu
+      shell: |
+        sudo chown ubuntu:ubuntu /etc/kubernetes/alb-ingress-connect-nginx.yaml
+        kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
 
     - name: Wait for the ALB to be created and active using AWS CLI
+      become: yes
+      become_user: ubuntu
       shell: |
         while [[ $(aws elbv2 describe-load-balancers --names "{{ alb_name }}" --query 'LoadBalancers[0].State.Code' --output text) != "active" ]]; do
           echo "Waiting for ALB to become active..."
@@ -171,6 +202,8 @@
       delay: 60
 
     - name: Set ALB DNS name and Zone ID facts using AWS CLI
+      become: yes
+      become_user: ubuntu
       shell: |
         alb_dns_name=$(aws elbv2 describe-load-balancers --names "{{ alb_name }}" --query 'LoadBalancers[0].DNSName' --output text)
         alb_zone_id=$(aws elbv2 describe-load-balancers --names "{{ alb_name }}" --query 'LoadBalancers[0].CanonicalHostedZoneId' --output text)
@@ -179,6 +212,8 @@
       register: alb_info
 
     - name: Load ALB facts from temporary file
+      become: yes
+      become_user: ubuntu
       shell: |
         source /tmp/ansible_alb_facts
         echo "ALB DNS Name: $alb_dns_name"
@@ -186,11 +221,15 @@
       register: alb_facts
 
     - name: Get Route53 Zone ID using AWS CLI
+      become: yes
+      become_user: ubuntu
       shell: |
         aws route53 list-hosted-zones-by-name --dns-name "int-devops.click." --query 'HostedZones[0].Id' --output text
       register: route53_zone_info
 
     - name: Create Route53 A record for ALB using AWS CLI
+      become: yes
+      become_user: ubuntu
       shell: |
         aws route53 change-resource-record-sets --hosted-zone-id "{{ route53_zone_info.stdout }}" --change-batch '
         {
