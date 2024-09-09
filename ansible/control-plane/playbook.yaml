@@ -14,11 +14,8 @@
           -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
           -o StrictHostKeyChecking=no
           -o UserKnownHostsFile=/dev/null
-          -o LogLevel=DEBUG
+          -o User=ubuntu
           -i {{ control_plane_key }}
-
-    - name: Test connection to Control Plane
-      command: uptime
 
     - name: Get values from environment
       set_fact:

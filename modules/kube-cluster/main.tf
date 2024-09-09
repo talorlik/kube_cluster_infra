@@ -73,6 +73,13 @@ resource "aws_instance" "cp_ec2" {
     volume_type = try(var.root_block_device.volume_type, null)
   }
 
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes        = [
+      ami
+    ]
+  }
+
   tags = merge(
     {
       Name                                        = local.cp_ec2_name
