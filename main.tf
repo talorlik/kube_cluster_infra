@@ -314,10 +314,10 @@ module "ecr_and_policy" {
 
 ############### S3 Ansible SSM ###################
 
-module "s3_ansible_ssm" {
-  source = "./modules/s3-ansible-ssm"
-  env    = var.env
-  region = var.region
-  prefix = var.prefix
-  tags   = local.tags
-}
+# module "s3_ansible_ssm" {
+#   source = "./modules/s3-ansible-ssm"
+#   env    = var.env
+#   region = var.region
+#   prefix = var.prefix
+#   tags   = local.tags
+# }
