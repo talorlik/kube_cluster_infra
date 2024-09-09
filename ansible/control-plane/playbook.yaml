@@ -1,9 +1,9 @@
 - name: Control Plane EC2s
   hosts: control_plane
   gather_facts: false
-  become: yes
   remote_user: ubuntu
   vars:
+    ansible_user: ubuntu
     bastion_ip: "{{ hostvars['bastion'].public_ip_address }}"
     bastion_key: "{{ lookup('env', 'BASTION_KEY') }}"
     control_plane_key: "{{ lookup('env', 'CP_KEY') }}"
@@ -11,10 +11,9 @@
     - name: Configure dynamic bastion host proxy for SSH
       set_fact:
         ansible_ssh_common_args: >-
-          -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
+          -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
           -o StrictHostKeyChecking=no
           -o UserKnownHostsFile=/dev/null
-          -o User=ubuntu
           -i {{ control_plane_key }}
 
     - name: Get values from environment
@@ -70,9 +69,6 @@
         helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
 
     - name: Update helm repositories
-      become: yes
-      become_user: ubuntu
-      remote_user: ubuntu
       shell: |
         helm repo update
 
