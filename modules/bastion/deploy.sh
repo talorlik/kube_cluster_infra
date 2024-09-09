@@ -56,5 +56,13 @@ curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64
 
 sudo dpkg -i session-manager-plugin.deb
 
+sudo hostnamectl set-hostname bastion
+
+# disable swap memory
+sudo swapoff -a
+
+# add the command to crontab to make it persistent across reboots
+(crontab -l 2>/dev/null || true; echo "@reboot /sbin/swapoff -a") | crontab -
+
 echo -e "Done bootstrapping Bastion.\n"
 EOF

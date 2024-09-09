@@ -5,16 +5,17 @@
   remote_user: ubuntu
   vars:
     bastion_ip: "{{ hostvars['bastion'].public_ip_address }}"
-    control_plane_key: "{{ lookup('env', 'CP_KEY') }}"
     bastion_key: "{{ lookup('env', 'BASTION_KEY') }}"
+    control_plane_key: "{{ lookup('env', 'CP_KEY') }}"
   tasks:
     - name: Configure dynamic bastion host proxy for SSH
       set_fact:
         ansible_ssh_common_args: >-
           -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
-          -o UserKnownHostsFile=/dev/null
           -o StrictHostKeyChecking=no
+          -o UserKnownHostsFile=/dev/null
           -o LogLevel=DEBUG
+          -i {{ control_plane_key }}
 
     - name: Test connection to Control Plane
       command: uptime
