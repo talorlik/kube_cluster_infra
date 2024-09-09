@@ -115,7 +115,7 @@ else
 fi
 
 sudo tee /etc/kubernetes/cluster-config.yaml <<CONF_EOF > /dev/null
-apiVersion: kubeadm.k8s.io/v1beta3
+apiVersion: kubeadm.k8s.io/v1beta4
 kind: ClusterConfiguration
 clusterName: ${cluster_name}
 apiServer:
