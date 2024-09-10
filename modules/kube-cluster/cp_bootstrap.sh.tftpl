@@ -160,8 +160,10 @@ networking:
   serviceSubnet: "10.96.0.0/12"
 CONF_EOF
 
+sudo kubeadm config migrate --old-config /etc/kubernetes/cluster-config.yaml --new-config /etc/kubernetes/cluster-config-v4.yaml
+
 # Run kubeadm init and capture the output as well as output it to the terminal
-KUBEADM_OUTPUT=$(sudo kubeadm init --config /etc/kubernetes/cluster-config.yaml | tee /dev/tty)
+KUBEADM_OUTPUT=$(sudo kubeadm init --config /etc/kubernetes/cluster-config-v4.yaml | tee >(cat >&2))
 
 # Extract the join command from the output
 JOIN_COMMAND="sudo $(echo "$KUBEADM_OUTPUT" | grep -A 2 "kubeadm join" | tail -n 3 | tr -d '\\\n')"
