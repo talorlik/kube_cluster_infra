@@ -251,6 +251,10 @@ module "kube_cluster" {
   sns_protocol                 = var.sns_protocol
   sns_endpoint                 = var.sns_endpoint
   tags                         = local.tags
+
+  depends_on = [
+    module.vpc
+  ]
 }
 
 ################## Bastion ######################
@@ -264,6 +268,11 @@ module "bastion" {
   ami              = local.ami_id
   public_subnet_id = element(module.vpc.public_subnets, length(module.vpc.public_subnets) - 1)
   tags             = local.tags
+
+  depends_on = [
+    module.vpc,
+    module.kube_cluster
+  ]
 }
 
 ################# Route 53 ######################
