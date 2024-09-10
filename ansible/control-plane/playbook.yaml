@@ -11,9 +11,7 @@
     - name: Configure dynamic bastion host proxy for SSH
       set_fact:
         ansible_ssh_common_args: >-
-          -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
-          -o StrictHostKeyChecking=no
-          -o UserKnownHostsFile=/dev/null
+          -o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ControlMaster=no -o ControlPersist=0 -W %h:%p -q -i {{ bastion_key }} ubuntu@{{ bastion_ip }}"
           -i {{ control_plane_key }}
 
     - name: Get values from environment
