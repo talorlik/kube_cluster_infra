@@ -28,20 +28,6 @@
         alb_name: "{{ lookup('env', 'ALB_NAME') }}"
         alb_tags: "{{ lookup('env', 'ALB_TAGS') }}"
 
-    - name: Ensure all nodes are ready and there are at least two nodes
-      shell: |
-        ready_nodes=$(kubectl get nodes --no-headers | grep ' Ready' | wc -l)
-        total_nodes=$(kubectl get nodes --no-headers | wc -l)
-        if [ "$ready_nodes" -ge 2 ] && [ "$ready_nodes" -eq "$total_nodes" ]; then
-          exit 0
-        else
-          exit 1
-        fi
-      register: nodes_check
-      retries: 5
-      delay: 60
-      until: nodes_check.rc == 0
-
     - name: Install Container Network Interface (CNI) - Flannel
       shell: |
         kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
