@@ -2,6 +2,7 @@
 set -euo pipefail
 
 sudo -u ubuntu -i <<'EOF'
+set -euo pipefail
 
 # Function to check if a package is installed
 is_installed() {
@@ -130,27 +131,37 @@ networking:
   serviceSubnet: "10.96.0.0/12"
 CONF_EOF
 
-# Run kubeadm init and capture the output
-KUBEADM_OUTPUT=$(sudo kubeadm init --config /etc/kubernetes/cluster-config.yaml)
+# Run kubeadm init and capture the output as well as output it to the terminal
+KUBEADM_OUTPUT=$(sudo kubeadm init --config /etc/kubernetes/cluster-config.yaml | tee /dev/tty)
 
 # Extract the join command from the output
 JOIN_COMMAND="sudo $(echo "$KUBEADM_OUTPUT" | grep -A 2 "kubeadm join" | tail -n 3 | tr -d '\\\n')"
 
-# Config kubectl
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown -R ubuntu:ubuntu $HOME/.kube
-sudo chmod 700 $HOME/.kube
-sudo chmod 600 $HOME/.kube/config
-
 # Store the full join command as a secret in AWS Secrets Manager
 aws secretsmanager create-secret --name ${join_secret_name} --secret-string "$JOIN_COMMAND" --region ${aws_region} --tags ${join_secret_tags}
 
-# Capture the contents of the /etc/kubernetes/admin.conf file
-ADMIN_CONF=$(sudo cat /etc/kubernetes/admin.conf)
+# Config kubectl
+if [ -f /etc/kubernetes/admin.conf ]; then
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown -R ubuntu:ubuntu $HOME/.kube
+  sudo chmod 700 $HOME/.kube
+  sudo chmod 600 $HOME/.kube/config
+else
+  echo "File /etc/kubernetes/admin.conf does not exist."
+  exit 1
+fi
 
-# Store the admin.conf content as a separate secret in AWS Secrets Manager
-aws secretsmanager create-secret --name ${kube_config_secret_name} --secret-string "$ADMIN_CONF" --region ${aws_region} --tags ${kube_config_secret_tags}
+# Capture the contents of the $HOME/.kube/config file
+if [ -f $HOME/.kube/config ]; then
+  ADMIN_CONF=$(cat $HOME/.kube/config)
+
+  # Store the admin.conf content as a separate secret in AWS Secrets Manager
+  aws secretsmanager create-secret --name ${kube_config_secret_name} --secret-string "$ADMIN_CONF" --region ${aws_region} --tags ${kube_config_secret_tags}
+else
+  echo "File $HOME/.kube/config does not exist."
+  exit 1
+fi
 
 # Install Kubernetes Dashboard
 helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/

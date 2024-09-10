@@ -2,6 +2,7 @@
 set -euo pipefail
 
 sudo -u ubuntu -i <<'EOF'
+set -euo pipefail
 
 # Function to check if a package is installed
 is_installed() {
