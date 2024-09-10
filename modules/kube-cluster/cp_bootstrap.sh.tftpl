@@ -1,6 +1,34 @@
 #!/bin/bash
 set -euo pipefail
 
+# Disable IPv6 via sysctl
+
+# Append settings to sysctl.conf to disable IPv6
+cat <<EOF >> /etc/sysctl.conf
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+EOF
+
+# Apply the sysctl changes immediately
+sysctl -p
+
+# Disable IPv6 for current session without reboot
+for iface in $(ls /proc/sys/net/ipv6/conf/); do
+  sysctl -w net.ipv6.conf.$iface.disable_ipv6=1
+done
+
+# Disable IPv6 at the GRUB bootloader level (this will take effect on the next reboot)
+sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 ipv6.disable=1"/' /etc/default/grub
+
+# Update GRUB to apply the new boot parameters (but don't reboot)
+update-grub
+
+# Force apt to use IPv4
+cat <<EOF >> /etc/apt/apt.conf.d/99force-ipv4
+Acquire::ForceIPv4 "true";
+EOF
+
 sudo -u ubuntu -i <<'EOF'
 set -euo pipefail
 
