@@ -50,6 +50,32 @@ module "vpc" {
   tags = local.tags
 }
 
+# Probe to check if NAT Gateway and Internet Gateway are operational
+resource "null_resource" "check_gateways" {
+  provisioner "local-exec" {
+    command = <<EOT
+attempts=0
+max_attempts=30
+while ! curl -s --head --request GET http://www.google.com | grep "200 OK" > /dev/null; do
+  echo "Waiting for internet connectivity via NAT Gateway..."
+  sleep 10
+  attempts=$((attempts+1))
+  if [ $attempts -ge $max_attempts ]; then
+    echo "Timeout waiting for internet connectivity."
+    exit 1
+  fi
+done
+echo "NAT Gateway and Internet Gateway are operational."
+EOT
+  }
+
+  depends_on = [
+    module.vpc,           # Ensure the probe waits for the VPC module
+    module.vpc.natgw_ids, # Ensure NAT Gateway is up
+    module.vpc.igw_id     # Ensure Internet Gateway is up
+  ]
+}
+
 ################## Control Plane IAM Role ######################
 
 module "cp_iam_role" {
@@ -252,8 +278,9 @@ module "kube_cluster" {
   sns_endpoint                 = var.sns_endpoint
   tags                         = local.tags
 
+  # Ensure EC2 instance creation waits for the probe to succeed
   depends_on = [
-    module.vpc
+    null_resource.check_gateways
   ]
 }
 
@@ -269,8 +296,9 @@ module "bastion" {
   public_subnet_id = element(module.vpc.public_subnets, length(module.vpc.public_subnets) - 1)
   tags             = local.tags
 
+  # Ensure EC2 instance creation waits for the probe to succeed
   depends_on = [
-    module.vpc,
+    null_resource.check_gateways,
     module.kube_cluster
   ]
 }
