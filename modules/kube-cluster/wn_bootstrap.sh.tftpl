@@ -141,20 +141,27 @@ fi
 
 # Function to fetch the join command from Secrets Manager
 fetch_join_command() {
-  aws secretsmanager get-secret-value --secret-id ${join_secret_name} --region ${aws_region} --query SecretString --output text
+  aws secretsmanager get-secret-value --secret-id ${join_secret_name} --region ${aws_region} --query SecretString --output text 2>&1
 }
 
 # Retry loop to fetch the join command
 while true; do
-  JOIN_COMMAND=$(fetch_join_command)
+  # Capture both output and exit status
+  JOIN_COMMAND=$(fetch_join_command || true) # Prevent immediate exit on failure
+  EXIT_STATUS=$?
 
-  if [ -n "$JOIN_COMMAND" ]; then
+  # Check if the command succeeded
+  if [ $EXIT_STATUS -eq 0 ]; then
     echo "Successfully retrieved join command."
     break
+  elif [[ "$JOIN_COMMAND" == *"ResourceNotFoundException"* ]]; then
+    echo "Secret not found yet, retrying in 15 seconds..."
   else
-    echo "Join command not available yet, retrying in 15 seconds..."
-    sleep 15
+    echo "An unexpected error occurred: $JOIN_COMMAND"
   fi
+
+  # Wait before retrying
+  sleep 15
 done
 
 # Run the kubeadm join command
