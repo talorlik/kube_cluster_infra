@@ -107,7 +107,7 @@ jobs:
       - name: Extract outputs from file and set as environment variables
         id: set_values
         env:
-          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-tf-outputs.json"
+          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
         run: |
           echo "country=$(jq -r '.country.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
           echo "state=$(jq -r '.state.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT

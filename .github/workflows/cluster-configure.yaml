@@ -1,0 +1,314 @@
+name: Kubernetes Cluster Configuration
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Select AWS Account'
+        required: true
+        type: choice
+        default: '019273956931'
+        options:
+          - '019273956931'
+      region:
+        description: 'Select AWS Region'
+        required: true
+        type: choice
+        default: 'us-east-1: N. Virginia'
+        options:
+          - 'us-east-1: N. Virginia'
+          - 'us-east-2: Ohio'
+      environment:
+        description: 'Select Environment'
+        required: true
+        type: choice
+        default: prod
+        options:
+          - prod
+          - dev
+
+jobs:
+  GetRunId:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.set_run_id.outputs.run_id }}
+    steps:
+      - name: Check and Install curl
+        run: |
+          if ! command -v curl &> /dev/null
+          then
+            echo "curl could not be found. Installing curl..."
+            sudo apt-get update
+            sudo apt-get install -y curl
+          else
+            echo "curl is already installed."
+          fi
+
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Fetch the latest successful workflow run ID from the Infra Deployment
+        id: set_run_id
+        run: |
+          LATEST_SUCCESS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/talorlik/kube_cluster_infra/actions/workflows/infra-provisioning-region.yaml/runs?status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id')
+
+          echo "run_id=$LATEST_SUCCESS" >> $GITHUB_OUTPUT
+
+          echo "The latest successful run ID is $LATEST_SUCCESS"
+
+  SetGlobals:
+    runs-on: ubuntu-latest
+    needs:
+      - GetRunId
+    outputs:
+      region_code: ${{ steps.set_region.outputs.region_code }}
+      cp_pem_file_name: ${{ steps.set_values.outputs.cp_pem_file_name }}
+      bastion_pem_file_name: ${{ steps.set_values.outputs.bastion_pem_file_name }}
+      certificate_arn: ${{ steps.set_values.outputs.certificate_arn }}
+      common_name: ${{ steps.set_values.outputs.common_name }}
+      sub_domain_cert_body_secret_name: ${{ steps.set_values.outputs.sub_domain_cert_body_secret_name }}
+      sub_domain_cert_key_secret_name: ${{ steps.set_values.outputs.sub_domain_cert_key_secret_name }}
+      alb_sg_id: ${{ steps.set_values.outputs.alb_sg_id }}
+      prefix: ${{ steps.set_values.outputs.prefix }}
+      cluster_name: ${{ steps.set_values.outputs.cluster_name }}
+      bastion_public_ip: ${{ steps.set_values.outputs.bastion_public_ip }}
+      cp_private_ip: ${{ steps.set_values.outputs.cp_private_ip }}
+    steps:
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Set Region
+        id: set_region
+        run: |
+          SELECTED_REGION="${{ inputs.region }}"
+          echo "region_code=${SELECTED_REGION%%:*}" >> $GITHUB_OUTPUT
+
+      - name: Download Output JSON file
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          github-token: "${{ secrets.GH_TOKEN }}"
+          repository: talorlik/kube_cluster_infra
+          run-id: ${{ needs.GetRunId.outputs.run_id }}
+
+      - name: Extract outputs from file and set as environment variables
+        id: set_values
+        env:
+          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+        run: |
+          echo "cp_pem_file_name=$(jq -r '.cp_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "bastion_pem_file_name=$(jq -r '.bastion_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "certificate_arn=$(jq -r '.certificate_arn.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "common_name=$(jq -r '.common_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "sub_domain_cert_body_secret_name=$(jq -r '.sub_domain_cert_body_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "sub_domain_cert_key_secret_name=$(jq -r '.sub_domain_cert_key_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "alb_sg_id=$(jq -r '.alb_sg_id.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "prefix=$(jq -r '.prefix.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "cluster_name=$(jq -r '.cluster_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "bastion_public_ip=$(jq -r '.bastion_public_ip.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "cp_private_ip=$(jq -r '.cp_private_ip.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+  Configure:
+    runs-on: ubuntu-latest
+    needs:
+      - SetGlobals
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ needs.SetGlobals.outputs.region_code }}
+      LOCAL_PATH: /home/runner/.ssh
+      CP_PEM_FILE_NAME: ${{ needs.SetGlobals.outputs.cp_pem_file_name }}
+      BASTION_PEM_FILE_NAME: ${{ needs.SetGlobals.outputs.bastion_pem_file_name }}
+      CERTIFICATE_ARN: ${{ needs.SetGlobals.outputs.certificate_arn }}
+      CERTIFICATE_BODY_SECRET_NAME: ${{ needs.SetGlobals.outputs.sub_domain_cert_body_secret_name }}
+      CERTIFICATE_KEY_SECRET_NAME: ${{ needs.SetGlobals.outputs.sub_domain_cert_key_secret_name }}
+      SUB_DOMAIN_NAME: ${{ needs.SetGlobals.outputs.common_name }}
+      ALB_SG_ID: ${{ needs.SetGlobals.outputs.alb_sg_id }}
+      ALB_NAME: "${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }}"
+      ALB_TAGS: "Name=${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }},Env=${{ inputs.environment }},Terraform=true,\"kubernetes.io/cluster/${{ needs.SetGlobals.outputs.cluster_name }}\"=owned"
+      BASTION_PUBLIC_IP: ${{ needs.SetGlobals.outputs.bastion_public_ip }}
+      CP_PRIVATE_IP: ${{ needs.SetGlobals.outputs.cp_private_ip }}
+    steps:
+      - name: Download Control Plane SSH key
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ env.CP_PEM_FILE_NAME }}"
+          path: "${{ env.LOCAL_PATH }}"
+
+      - name: Download Bastion SSH key
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ env.BASTION_PEM_FILE_NAME }}"
+          path: "${{ env.LOCAL_PATH }}"
+
+      - name: Set permissions for SSH key and directory
+        run: |
+          chmod 400 ${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }}
+          chmod 400 ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
+          chmod 700 ${{ env.LOCAL_PATH }}
+
+      - name: SSH to Control Plane and deploy resources
+        run: |
+          ssh -C \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            -o 'ProxyCommand=ssh \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ServerAliveInterval=60 \
+              -o ServerAliveCountMax=10 \
+              -W %h:%p -i ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }} ubuntu@${{ env.BASTION_PUBLIC_IP }}' \
+            -i ${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }} ubuntu@${{ env.CP_PRIVATE_IP }} << 'EOF'
+          kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+
+          kubectl apply -k 'github.com/kubernetes/cloud-provider-aws/examples/existing-cluster/base/?ref=master'
+
+          helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+          helm repo update
+
+          sudo tee /etc/kubernetes/ebs-csi-values.yaml <<EBS_EOF > /dev/null
+          storageClasses:
+            - name: ebs-sc
+              annotations:
+                storageclass.kubernetes.io/is-default-class: "true"
+              provisioner: ebs.csi.aws.com
+              volumeBindingMode: WaitForFirstConsumer
+              parameters:
+                csi.storage.k8s.io/fstype: xfs
+                type: gp3
+                encrypted: "true"
+          EBS_EOF
+
+          sudo chown ubuntu:ubuntu /etc/kubernetes/ebs-csi-values.yaml
+          helm upgrade --install aws-ebs-csi-driver -f /etc/kubernetes/ebs-csi-values.yaml -n kube-system aws-ebs-csi-driver/aws-ebs-csi-driver
+
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo update
+
+          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+          --namespace ingress-nginx \
+          --create-namespace \
+          --set controller.service.type=NodePort \
+          --set controller.service.nodePorts.https=8443
+
+          kubectl create secret tls tls-secret \
+          --namespace ingress-nginx \
+          --cert=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_BODY_SECRET_NAME }}" --query SecretString --output text) \
+          --key=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_KEY_SECRET_NAME }}" --query SecretString --output text)
+
+          sudo tee /etc/kubernetes/alb-ingress-connect-nginx.yaml <<ING_EOF > /dev/null
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: alb-ingress-connect-nginx
+            namespace: ingress-nginx
+            annotations:
+              # Ingress Core Settings
+              kubernetes.io/ingress.class: 'alb'
+              alb.ingress.kubernetes.io/scheme: 'internet-facing'
+              kubernetes.io/service-name: 'ingress-nginx/ingress-nginx-controller'
+
+              # Health Check Settings
+              alb.ingress.kubernetes.io/healthcheck-protocol: 'HTTPS'
+              alb.ingress.kubernetes.io/healthcheck-port: 8443
+              alb.ingress.kubernetes.io/healthcheck-path: '/health'
+              alb.ingress.kubernetes.io/healthcheck-interval-seconds: 30
+              alb.ingress.kubernetes.io/healthcheck-timeout-seconds: 5
+              alb.ingress.kubernetes.io/success-codes: '200-399,404'
+              alb.ingress.kubernetes.io/healthy-threshold-count: 5
+              alb.ingress.kubernetes.io/unhealthy-threshold-count: 2
+
+              # SSL Settings
+              alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTPS":8443}]'
+              alb.ingress.kubernetes.io/certificate-arn: '${{ env.CERTIFICATE_ARN }}'
+              nginx.ingress.kubernetes.io/backend-protocol: 'HTTPS'
+              nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+              alb.ingress.kubernetes.io/security-groups: '${{ env.ALB_SG_ID }}'
+              alb.ingress.kubernetes.io/load-balancer-name: '${{ env.ALB_NAME }}'
+              alb.ingress.kubernetes.io/tags: '${{ env.ALB_TAGS }}'
+          spec:
+            rules:
+            - host: "${{ env.SUB_DOMAIN_NAME }}"
+              http:
+                paths:
+                - path: /dashboard/*
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: kubernetes-dashboard-kong-proxy
+                      port:
+                        number: 443
+                - path: /*
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: polybot-service
+                      port:
+                        number: 8443
+            tls:
+            - hosts:
+              - "${{ env.SUB_DOMAIN_NAME }}"
+              secretName: tls-secret
+            ingressClassName: nginx
+          ING_EOF
+
+          sudo chown ubuntu:ubuntu /etc/kubernetes/alb-ingress-connect-nginx.yaml
+          kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
+
+          while [[ $(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].State.Code' --output text) != "active" ]]; do
+            echo "Waiting for ALB to become active..."
+            sleep 60
+          done
+
+          alb_dns_name=$(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].DNSName' --output text)
+          alb_zone_id=$(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].CanonicalHostedZoneId' --output text)
+
+          route53_zone_info=$(aws route53 list-hosted-zones-by-name --dns-name "int-devops.click." --query 'HostedZones[0].Id' --output text)
+
+          aws route53 change-resource-record-sets --hosted-zone-id "$route53_zone_info" --change-batch '{
+            "Changes": [{
+              "Action": "UPSERT",
+              "ResourceRecordSet": {
+                "Name": "${{ env.SUB_DOMAIN_NAME }}",
+                "Type": "A",
+                "AliasTarget": {
+                  "DNSName": "$alb_dns_name",
+                  "HostedZoneId": "$alb_zone_id",
+                  "EvaluateTargetHealth": false
+                }
+              }
+            }]
+          }'
+          EOF

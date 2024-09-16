@@ -24,3 +24,7 @@ output "autoscaling_group_arn" {
   description = "Autoscaling Group ARN"
   value       = aws_autoscaling_group.asg.arn
 }
+
+output "cp_private_ip" {
+  value = aws_instance.cp_ec2.private_ip
+}

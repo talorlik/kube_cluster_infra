@@ -188,10 +188,18 @@ output "bastion_pem_file_path" {
   value = module.bastion.pem_file_path
 }
 
+output "bastion_public_ip" {
+  value = module.bastion.public_ip
+}
+
 ########## Kubernetes Cluster ##############
 
 output "cluster_name" {
   value = local.cluster_name
+}
+
+output "cp_private_ip" {
+  value = module.kube_cluster.cp_private_ip
 }
 
 ############ S3 Ansible SSM ################
