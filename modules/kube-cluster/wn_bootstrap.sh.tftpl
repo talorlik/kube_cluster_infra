@@ -165,7 +165,7 @@ while true; do
 done
 
 # Run the kubeadm join command
-$JOIN_COMMAND
+eval "$JOIN_COMMAND"
 
 echo -e "Done bootstrapping Worker Node.\n"
 EOF
