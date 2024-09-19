@@ -294,8 +294,15 @@ jobs:
           sudo chown ubuntu:ubuntu /etc/kubernetes/alb-ingress-connect-nginx.yaml
           kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
 
+          retries=0
+          max_retries=10
           while [[ $(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].State.Code' --output text) != "active" ]]; do
-            echo "Waiting for ALB to become active..."
+            if [[ $retries -ge $max_retries ]]; then
+              echo "Maximum retries reached. ALB is still not active."
+              exit 1
+            fi
+            echo "Waiting for ALB to become active... Retry #$((retries + 1))"
+            ((retries++))
             sleep 60
           done
 
