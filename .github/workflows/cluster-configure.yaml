@@ -73,7 +73,6 @@ jobs:
       - GetRunId
     outputs:
       region_code: ${{ steps.set_region.outputs.region_code }}
-      cp_pem_file_name: ${{ steps.set_values.outputs.cp_pem_file_name }}
       bastion_pem_file_name: ${{ steps.set_values.outputs.bastion_pem_file_name }}
       certificate_arn: ${{ steps.set_values.outputs.certificate_arn }}
       common_name: ${{ steps.set_values.outputs.common_name }}
@@ -83,7 +82,8 @@ jobs:
       prefix: ${{ steps.set_values.outputs.prefix }}
       cluster_name: ${{ steps.set_values.outputs.cluster_name }}
       bastion_public_ip: ${{ steps.set_values.outputs.bastion_public_ip }}
-      cp_private_ip: ${{ steps.set_values.outputs.cp_private_ip }}
+      kube_dashboard_token_secret_name: ${{ steps.set_values.outputs.kube_dashboard_token_secret_name }}
+      kube_dashboard_token_secret_tags: ${{ steps.set_values.outputs.kube_dashboard_token_secret_tags }}
     steps:
       - name: Check and Install jq
         run: |
@@ -115,8 +115,6 @@ jobs:
         env:
           ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
         run: |
-          echo "cp_pem_file_name=$(jq -r '.cp_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "bastion_pem_file_name=$(jq -r '.bastion_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
 
           echo "certificate_arn=$(jq -r '.certificate_arn.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
@@ -135,7 +133,9 @@ jobs:
 
           echo "bastion_public_ip=$(jq -r '.bastion_public_ip.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
 
-          echo "cp_private_ip=$(jq -r '.cp_private_ip.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "kube_dashboard_token_secret_name=$(jq -r '.kube_dashboard_token_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "kube_dashboard_token_secret_tags=$(jq -r '.kube_dashboard_token_secret_tags.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
 
   Configure:
     runs-on: ubuntu-latest
@@ -147,7 +147,6 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ needs.SetGlobals.outputs.region_code }}
       LOCAL_PATH: /home/runner/.ssh
-      CP_PEM_FILE_NAME: ${{ needs.SetGlobals.outputs.cp_pem_file_name }}
       BASTION_PEM_FILE_NAME: ${{ needs.SetGlobals.outputs.bastion_pem_file_name }}
       CERTIFICATE_ARN: ${{ needs.SetGlobals.outputs.certificate_arn }}
       CERTIFICATE_BODY_SECRET_NAME: ${{ needs.SetGlobals.outputs.sub_domain_cert_body_secret_name }}
@@ -157,17 +156,9 @@ jobs:
       ALB_NAME: "${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }}"
       ALB_TAGS: "Name=${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }},Env=${{ inputs.environment }},Terraform=true,\"kubernetes.io/cluster/${{ needs.SetGlobals.outputs.cluster_name }}\"=owned"
       BASTION_PUBLIC_IP: ${{ needs.SetGlobals.outputs.bastion_public_ip }}
-      CP_PRIVATE_IP: ${{ needs.SetGlobals.outputs.cp_private_ip }}
+      KUBE_DASHBOARD_TOKEN_SECRET_NAME: ${{ needs.SetGlobals.outputs.kube_dashboard_token_secret_name }}
+      KUBE_DASHBOARD_TOKEN_SECRET_TAGS: ${{ needs.SetGlobals.outputs.kube_dashboard_token_secret_tags }}
     steps:
-      - name: Download Control Plane SSH key
-        uses: actions/download-artifact@v4
-        with:
-          name: "${{ env.CP_PEM_FILE_NAME }}"
-          github-token: "${{ secrets.GH_TOKEN }}"
-          repository: talorlik/kube_cluster_infra
-          run-id: ${{ needs.GetRunId.outputs.run_id }}
-          path: "${{ env.LOCAL_PATH }}"
-
       - name: Download Bastion SSH key
         uses: actions/download-artifact@v4
         with:
@@ -179,7 +170,6 @@ jobs:
 
       - name: Set permissions for SSH key and directory
         run: |
-          chmod 400 ${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }}
           chmod 400 ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
           chmod 700 ${{ env.LOCAL_PATH }}
 
@@ -190,13 +180,7 @@ jobs:
             -o UserKnownHostsFile=/dev/null \
             -o ServerAliveInterval=60 \
             -o ServerAliveCountMax=10 \
-            -o 'ProxyCommand=ssh \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o ServerAliveInterval=60 \
-              -o ServerAliveCountMax=10 \
-              -W %h:%p -i ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }} ubuntu@${{ env.BASTION_PUBLIC_IP }}' \
-            -i ${{ env.LOCAL_PATH }}/${{ env.CP_PEM_FILE_NAME }} ubuntu@${{ env.CP_PRIVATE_IP }} << 'EOF'
+            -i ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }} ubuntu@${{ env.BASTION_PUBLIC_IP }} << 'EOF'
           kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 
           kubectl apply -k 'github.com/kubernetes/cloud-provider-aws/examples/existing-cluster/base/?ref=master'
@@ -204,7 +188,7 @@ jobs:
           helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
           helm repo update
 
-          sudo tee /etc/kubernetes/ebs-csi-values.yaml <<EBS_EOF > /dev/null
+          sudo tee $HOME/kubernetes/ebs-csi-values.yaml <<EBS_EOF > /dev/null
           storageClasses:
             - name: ebs-sc
               annotations:
@@ -217,8 +201,48 @@ jobs:
                 encrypted: "true"
           EBS_EOF
 
-          sudo chown ubuntu:ubuntu /etc/kubernetes/ebs-csi-values.yaml
-          helm upgrade --install aws-ebs-csi-driver -f /etc/kubernetes/ebs-csi-values.yaml -n kube-system aws-ebs-csi-driver/aws-ebs-csi-driver
+          helm upgrade --install aws-ebs-csi-driver -f $HOME/kubernetes/ebs-csi-values.yaml -n kube-system aws-ebs-csi-driver/aws-ebs-csi-driver
+
+          # Install Kubernetes Dashboard
+          helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+          helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+
+          sudo tee $HOME/kubernetes/k8s-dashboard-user.yaml <<DASH_EOF > /dev/null
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: admin-user
+            namespace: kubernetes-dashboard
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: admin-user
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: cluster-admin
+          subjects:
+          - kind: ServiceAccount
+            name: admin-user
+            namespace: kubernetes-dashboard
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: admin-user
+            namespace: kubernetes-dashboard
+            annotations:
+              kubernetes.io/service-account.name: "admin-user"
+          type: kubernetes.io/service-account-token
+          DASH_EOF
+
+          kubectl apply -f $HOME/kubernetes/k8s-dashboard-user.yaml
+
+          DASHBOARD_TOKEN=$(kubectl get secret admin-user -n kubernetes-dashboard -o jsonpath={".data.token"} | base64 -d)
+
+          # Store the dashboard token as a separate secret in AWS Secrets Manager
+          aws secretsmanager create-secret --name ${{ env.KUBE_DASHBOARD_TOKEN_SECRET_NAME }} --secret-string "$DASHBOARD_TOKEN" --region ${{ env.AWS_REGION }} --tags ${{ env.KUBE_DASHBOARD_TOKEN_SECRET_TAGS }}
 
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
           helm repo update
@@ -234,7 +258,7 @@ jobs:
           --cert=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_BODY_SECRET_NAME }}" --query SecretString --output text) \
           --key=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_KEY_SECRET_NAME }}" --query SecretString --output text)
 
-          sudo tee /etc/kubernetes/alb-ingress-connect-nginx.yaml <<ING_EOF > /dev/null
+          sudo tee $HOME/kubernetes/alb-ingress-connect-nginx.yaml <<ING_EOF > /dev/null
           apiVersion: networking.k8s.io/v1
           kind: Ingress
           metadata:
@@ -291,8 +315,7 @@ jobs:
             ingressClassName: nginx
           ING_EOF
 
-          sudo chown ubuntu:ubuntu /etc/kubernetes/alb-ingress-connect-nginx.yaml
-          kubectl apply -f /etc/kubernetes/alb-ingress-connect-nginx.yaml
+          kubectl apply -f $HOME/kubernetes/alb-ingress-connect-nginx.yaml
 
           retries=0
           max_retries=10

@@ -1,12 +1,16 @@
 locals {
-  iam_role_name     = "${var.prefix}-${var.region}-bastion-ssm-iam-role-${var.env}"
-  ssm_policy_name   = "${var.prefix}-${var.region}-bastion-ssm-iam-policy-${var.env}"
-  iam_profile_name  = "${var.prefix}-${var.region}-bastion-instance-profile-${var.env}"
-  sg_name           = "${var.prefix}-${var.region}-bastion-sg-${var.env}"
-  key_name          = "${var.prefix}-${var.region}-bastion-key-pair-${var.env}"
-  ec2_instance_name = "${var.prefix}-${var.region}-bastion-ec2-${var.env}"
-  az                = element(var.azs, length(var.azs) - 1)
-  user_data         = file("${path.module}/deploy.sh")
+  iam_role_name               = "${var.prefix}-${var.region}-bastion-ssm-iam-role-${var.env}"
+  ssm_policy_name             = "${var.prefix}-${var.region}-bastion-ssm-iam-policy-${var.env}"
+  iam_role_secret_policy_name = "${var.prefix}-${var.region}-bastion-secret-policy-${var.env}"
+  iam_profile_name            = "${var.prefix}-${var.region}-bastion-instance-profile-${var.env}"
+  sg_name                     = "${var.prefix}-${var.region}-bastion-sg-${var.env}"
+  key_name                    = "${var.prefix}-${var.region}-bastion-key-pair-${var.env}"
+  ec2_instance_name           = "${var.prefix}-${var.region}-bastion-ec2-${var.env}"
+  az                          = element(var.azs, length(var.azs) - 1)
+  user_data = templatefile("${path.module}/deploy.sh.tftpl", {
+    aws_region              = var.region
+    kube_config_secret_name = var.kube_config_secret_name
+  })
 }
 
 ############## IAM Role + Policy + Profile ################
@@ -66,6 +70,33 @@ resource "aws_iam_policy" "ssm_policy" {
 resource "aws_iam_role_policy_attachment" "attach_ssm_policy" {
   role       = aws_iam_role.bastion_role.name
   policy_arn = aws_iam_policy.ssm_policy.arn
+}
+
+resource "aws_iam_policy" "iam_create_secret_policy" {
+  name = local.iam_role_secret_policy_name
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid    = "CreateAndReadOnlySecret",
+        Effect = "Allow",
+        Action = [
+          "secretsmanager:CreateSecret",
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:UpdateSecret",
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:TagResource"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "attach_secret_policy" {
+  policy_arn = aws_iam_policy.iam_create_secret_policy.arn
+  role       = aws_iam_role.bastion_role.name
 }
 
 resource "aws_iam_instance_profile" "bastion_profile" {
@@ -131,7 +162,7 @@ resource "aws_instance" "cp_ec2" {
   key_name                    = local.key_name
   subnet_id                   = var.public_subnet_id
   iam_instance_profile        = aws_iam_instance_profile.bastion_profile.name
-  user_data                   = local.user_data
+  user_data                   = base64encode(local.user_data)
   associate_public_ip_address = true
   ebs_optimized               = true
 

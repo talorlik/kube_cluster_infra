@@ -202,6 +202,14 @@ output "cp_private_ip" {
   value = module.kube_cluster.cp_private_ip
 }
 
+output "kube_dashboard_token_secret_name" {
+  value = module.kube_cluster.kube_dashboard_token_secret_name
+}
+
+output "kube_dashboard_token_secret_tags" {
+  value = module.kube_cluster.kube_dashboard_token_secret_tags
+}
+
 ############ S3 Ansible SSM ################
 
 # output "s3_ansible_ssm_name" {

@@ -28,3 +28,15 @@ output "autoscaling_group_arn" {
 output "cp_private_ip" {
   value = aws_instance.cp_ec2.private_ip
 }
+
+output "kube_config_secret_name" {
+  value = local.kube_config_secret_name
+}
+
+output "kube_dashboard_token_secret_name" {
+  value = local.kube_dashboard_token_secret_name
+}
+
+output "kube_dashboard_token_secret_tags" {
+  value = local.aws_cli_dashboard_tags
+}

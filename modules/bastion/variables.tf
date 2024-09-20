@@ -14,6 +14,11 @@ variable "prefix" {
   type        = string
 }
 
+variable "kube_config_secret_name" {
+  description = "The Name of the Kube Config secret"
+  type        = string
+}
+
 variable "ami" {
   description = "The AMI id to be used in the instance creation"
   type        = string

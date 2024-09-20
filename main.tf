@@ -286,21 +286,31 @@ module "kube_cluster" {
 
 ################## Bastion ######################
 module "bastion" {
-  source           = "./modules/bastion"
-  env              = var.env
-  region           = var.region
-  prefix           = var.prefix
-  azs              = local.azs
-  vpc_id           = module.vpc.vpc_id
-  ami              = local.ami_id
-  public_subnet_id = element(module.vpc.public_subnets, length(module.vpc.public_subnets) - 1)
-  tags             = local.tags
+  source                  = "./modules/bastion"
+  env                     = var.env
+  region                  = var.region
+  prefix                  = var.prefix
+  kube_config_secret_name = module.kube_cluster.kube_config_secret_name
+  azs                     = local.azs
+  vpc_id                  = module.vpc.vpc_id
+  ami                     = local.ami_id
+  public_subnet_id        = element(module.vpc.public_subnets, length(module.vpc.public_subnets) - 1)
+  tags                    = local.tags
 
   # Ensure EC2 instance creation waits for the probe to succeed
   depends_on = [
     null_resource.check_gateways,
     module.kube_cluster
   ]
+}
+
+####### Bastion Security Geoup Attachments ######
+resource "aws_vpc_security_group_ingress_rule" "cp_allow_api_from_bastion" {
+  security_group_id            = module.cp_sg.id
+  from_port                    = 6443
+  to_port                      = 6443
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = module.bastion.sg_id
 }
 
 ################# Route 53 ######################

@@ -75,6 +75,10 @@ sudo sysctl --system
 KUBERNETES_VERSION=${k8s_version}
 PROJECT_PATH=prerelease:/main
 
+if ! [ -d /etc/apt/keyrings ]; then
+  sudo mkdir -p -m 755 /etc/apt/keyrings
+fi
+
 curl -fsSL https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 sudo echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
@@ -115,6 +119,8 @@ providers:
     apiVersion: credentialprovider.kubelet.k8s.io/v1
 CRED_EOF
 
+sudo systemctl restart kubelet
+
 # change hostname to a full form
 sudo hostname | grep -E '^ip-[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,3}$' && sudo hostnamectl set-hostname $(hostname).${aws_region}.compute.internal
 
@@ -145,7 +151,13 @@ fetch_join_command() {
 }
 
 # Retry loop to fetch the join command
+retries=0
+max_retries=10
 while true; do
+  if [[ $retries -ge $max_retries ]]; then
+    echo "Maximum retries reached. Join command is still not available or can't be fetched."
+    exit 1
+  fi
   # Capture both output and exit status
   JOIN_COMMAND=$(fetch_join_command || true) # Prevent immediate exit on failure
   EXIT_STATUS=$?
@@ -161,8 +173,12 @@ while true; do
   fi
 
   # Wait before retrying
+  echo "Waiting to retry fetching the join command... Retry #$((retries + 1))"
+  ((retries++))
   sleep 15
 done
+
+echo $JOIN_COMMAND
 
 # Run the kubeadm join command
 eval "$JOIN_COMMAND"

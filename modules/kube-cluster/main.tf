@@ -37,15 +37,13 @@ locals {
   ])
   # Using a template to dynamically generate the userdata deployment script
   cp_user_data = templatefile("${path.module}/cp_bootstrap.sh.tftpl", {
-    aws_region                       = var.region
-    k8s_version                      = var.k8s_version
-    cluster_name                     = var.cluster_name
-    join_secret_name                 = local.join_secret_name
-    join_secret_tags                 = local.aws_cli_join_tags
-    kube_config_secret_name          = local.kube_config_secret_name
-    kube_config_secret_tags          = local.aws_cli_config_tags
-    kube_dashboard_token_secret_name = local.kube_dashboard_token_secret_name
-    kube_dashboard_token_secret_tags = local.aws_cli_dashboard_tags
+    aws_region              = var.region
+    k8s_version             = var.k8s_version
+    cluster_name            = var.cluster_name
+    join_secret_name        = local.join_secret_name
+    join_secret_tags        = local.aws_cli_join_tags
+    kube_config_secret_name = local.kube_config_secret_name
+    kube_config_secret_tags = local.aws_cli_config_tags
   })
   wn_user_data = templatefile("${path.module}/wn_bootstrap.sh.tftpl", {
     aws_region       = var.region
@@ -75,7 +73,7 @@ resource "aws_instance" "cp_ec2" {
 
   lifecycle {
     create_before_destroy = true
-    ignore_changes        = [
+    ignore_changes = [
       ami
     ]
   }
