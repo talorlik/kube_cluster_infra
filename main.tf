@@ -19,8 +19,8 @@ locals {
   wn_azs       = slice(local.azs, 1, 3)
   ami_id       = module.ubuntu_24_04_latest.ami_id
   tags = {
-    Env       = var.env
-    Terraform = true
+    Env       = "${var.env}"
+    Terraform = "true"
   }
 }
 
@@ -32,11 +32,11 @@ module "vpc" {
   azs            = local.azs
   public_subnets = [for k, v in local.azs : cidrsubnet(var.vpc_cidr, 8, k + 1)]
   public_subnet_tags = {
-    "kubernetes.io/role/alb"                      = 1
+    "kubernetes.io/role/alb"                      = "1"
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
   }
   igw_tags = {
-    Name = local.igw_name
+    Name = "${local.igw_name}"
   }
   private_subnets = [for k, v in local.azs : cidrsubnet(var.vpc_cidr, 8, k + 10)]
   private_subnet_tags = {
@@ -47,6 +47,10 @@ module "vpc" {
   nat_gateway_tags = {
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
   }
+
+  enable_dhcp_options      = true
+  dhcp_options_domain_name = "ec2.internal"
+
   tags = local.tags
 }
 

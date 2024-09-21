@@ -10,19 +10,19 @@ locals {
   kube_dashboard_token_secret_name = "${var.prefix}/${var.region}/${var.kube_dashboard_token_secret_name}/${var.env}"
   join_tags = merge(
     {
-      Name = local.join_secret_name
+      Name = "${local.join_secret_name}"
     },
     var.tags
   )
   config_tags = merge(
     {
-      Name = local.kube_config_secret_name
+      Name = "${local.kube_config_secret_name}"
     },
     var.tags
   )
   dashboard_tags = merge(
     {
-      Name = local.kube_dashboard_token_secret_name
+      Name = "${local.kube_dashboard_token_secret_name}"
     },
     var.tags
   )
@@ -80,10 +80,10 @@ resource "aws_instance" "cp_ec2" {
 
   tags = merge(
     {
-      Name                                        = local.cp_ec2_name
+      Name                                        = "${local.cp_ec2_name}"
       SSH                                         = "control_plane"
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
-      "node-role.kubernetes.io/control-plane"     = 1
+      "node-role.kubernetes.io/control-plane"     = "1"
     },
     var.tags
   )
@@ -135,9 +135,9 @@ resource "aws_launch_template" "launch_template" {
     resource_type = "instance"
     tags = merge(
       {
-        Name                                        = local.wn_ec2_name
+        Name                                        = "${local.wn_ec2_name}"
         "kubernetes.io/cluster/${var.cluster_name}" = "owned"
-        "node-role.kubernetes.io/node"              = 1
+        "node-role.kubernetes.io/node"              = "1"
       },
       var.tags
     )
@@ -145,7 +145,7 @@ resource "aws_launch_template" "launch_template" {
 
   tags = merge(
     {
-      Name = local.launch_template_name
+      Name = "${local.launch_template_name}"
     },
     var.tags
   )

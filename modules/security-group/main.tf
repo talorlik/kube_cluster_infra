@@ -32,7 +32,7 @@ resource "aws_security_group" "sg" {
 
   tags = merge(
     {
-      Name = local.sg_name
+      Name = "${local.sg_name}"
     },
     var.tags
   )

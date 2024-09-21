@@ -51,7 +51,7 @@ sudo apt-get update
 sudo apt-get update --fix-missing
 
 # Packages to check and install
-for package in libc6 groff less unzip curl ca-certificates gnupg gpg jq software-properties-common apt-transport-https; do
+for package in libc6 groff less unzip curl ca-certificates gnupg gpg jq software-properties-common apt-transport-https socat; do
   install_if_missing "$package"
 done
 

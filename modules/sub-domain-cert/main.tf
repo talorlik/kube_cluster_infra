@@ -28,7 +28,7 @@ resource "aws_acm_certificate" "acm_cert" {
 
   tags = merge(
     {
-      Name = var.common_name
+      Name = "${var.common_name}"
     },
     var.tags
   )

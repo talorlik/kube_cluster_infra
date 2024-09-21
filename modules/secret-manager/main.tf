@@ -8,7 +8,7 @@ resource "aws_secretsmanager_secret" "sm_secret" {
 
   tags = merge(
     {
-      Name = local.secret_name
+      Name = "${local.secret_name}"
     },
     var.tags
   )

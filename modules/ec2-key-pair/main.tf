@@ -22,7 +22,7 @@ resource "aws_key_pair" "ec2_key_pair" {
   public_key = tls_private_key.talo_tls_private_key.public_key_openssh
   tags = merge(
     {
-      Name = local.name
+      Name = "${local.name}"
     },
     var.tags
   )

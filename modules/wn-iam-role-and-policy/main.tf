@@ -13,7 +13,7 @@ resource "aws_iam_role" "iam_role" {
 
   tags = merge(
     {
-      Name = local.iam_role_name
+      Name = "${local.iam_role_name}"
     },
     var.tags
   )

@@ -9,7 +9,7 @@ resource "aws_ecr_repository" "ecr" {
 
   tags = merge(
     {
-      Name = local.ecr_name
+      Name = "${local.ecr_name}"
     },
     var.tags
   )

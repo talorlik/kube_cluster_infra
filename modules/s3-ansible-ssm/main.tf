@@ -12,7 +12,7 @@ resource "aws_s3_bucket" "ansible_ssm" {
 
   tags = merge(
     {
-      Name = local.name
+      Name = "${local.name}"
     },
     var.tags
   )
