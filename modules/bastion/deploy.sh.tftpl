@@ -43,31 +43,31 @@ cat <<EOF >> /etc/apt/apt.conf.d/99force-ipv4
 Acquire::ForceIPv4 "true";
 EOF
 
-sudo -u ubuntu -i <<'EOF'
-set -euo pipefail
-
 # Function to check if a package is installed
 is_installed() {
-    dpkg -l | grep -q "^ii  $1"
+  dpkg -l | grep -q "^ii  $1"
 }
 
 # Function to install a package if it is not installed
 install_if_missing() {
-    if ! is_installed "$1"; then
-        echo "Installing $1..."
-        sudo apt-get install -y "$1"
-    else
-        echo "$1 is already installed."
-    fi
+  if ! is_installed "$1"; then
+    echo "Installing $1..."
+    apt-get install -y "$1"
+  else
+    echo "$1 is already installed."
+  fi
 }
 
-sudo apt-get update
-sudo apt-get update --fix-missing
+apt-get update
+apt-get update --fix-missing
 
 # Packages to check and install
 for package in libc6 groff less unzip apt-transport-https ca-certificates curl gnupg gpg jq software-properties-common socat; do
-    install_if_missing "$package"
+  install_if_missing "$package"
 done
+
+sudo -u ubuntu -i <<'EOF'
+set -euo pipefail
 
 # Check if AWS Cli is installed and if not install and verify it
 if ! command -v aws &> /dev/null; then
