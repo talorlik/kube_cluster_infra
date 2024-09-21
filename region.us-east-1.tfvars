@@ -45,6 +45,20 @@ cp_sg_ingress_rules = [
     protocol        = "tcp"
     cidr_blocks     = ["0.0.0.0/0"]
     security_groups = []
+  },
+  {
+    from_port       = 53
+    to_port         = 53
+    protocol        = "udp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = -1
+    to_port         = -1
+    protocol        = "icmp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
   }
 ]
 cp_sg_egress_rules = [
@@ -63,6 +77,20 @@ wn_sg_ingress_rules = [
     from_port       = 22
     to_port         = 22
     protocol        = "tcp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = 53
+    to_port         = 53
+    protocol        = "udp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = -1
+    to_port         = -1
+    protocol        = "icmp"
     cidr_blocks     = ["0.0.0.0/0"]
     security_groups = []
   }
@@ -102,11 +130,11 @@ wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v5d"
-sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v5d"
-join_secret_name                 = "kubeadm/join-details/v5d"
-kube_config_secret_name          = "kube/config/v5d"
-kube_dashboard_token_secret_name = "kube/dashboard-token/v5d"
+sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v6"
+sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v6"
+join_secret_name                 = "kubeadm/join-details/v6"
+kube_config_secret_name          = "kube/config/v6"
+kube_dashboard_token_secret_name = "kube/dashboard-token/v6"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"

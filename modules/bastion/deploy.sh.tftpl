@@ -43,6 +43,12 @@ cat <<EOF >> /etc/apt/apt.conf.d/99force-ipv4
 Acquire::ForceIPv4 "true";
 EOF
 
+# disable swap memory
+sudo swapoff -a
+
+# add the command to crontab to make it persistent across reboots
+(crontab -l 2>/dev/null || true; echo "@reboot /sbin/swapoff -a") | crontab -
+
 # Function to check if a package is installed
 is_installed() {
   dpkg -l | grep -q "^ii  $1"
@@ -119,14 +125,6 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.
 
 sudo apt-get update
 sudo apt-get install -y kubectl helm
-
-sudo hostnamectl set-hostname bastion
-
-# disable swap memory
-sudo swapoff -a
-
-# add the command to crontab to make it persistent across reboots
-(crontab -l 2>/dev/null || true; echo "@reboot /sbin/swapoff -a") | crontab -
 
 # Function to fetch the kube config from Secrets Manager
 fetch_kube_config() {
