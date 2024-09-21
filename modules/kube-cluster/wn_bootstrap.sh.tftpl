@@ -154,35 +154,43 @@ providers:
     apiVersion: credentialprovider.kubelet.k8s.io/v1
 CRED_EOF
 
-sudo systemctl restart kubelet
+# sudo systemctl restart kubelet
 
-sleep 60
+# sleep 60
 
 # Function to fetch the join command from Secrets Manager
 fetch_join_command() {
-  aws secretsmanager get-secret-value --secret-id ${join_secret_name} --region ${aws_region} --query SecretString --output text 2>&1
+  # Disable immediate exit on error for this command
+  set +e
+  local output=$(aws secretsmanager get-secret-value --secret-id "${join_secret_name}" --region "${aws_region}" --query SecretString --output text 2>&1)
+  local status=$?
+  # Re-enable immediate exit on error
+  set -e
+  # Return the output
+  echo "$output"
+  # Return the exit status
+  return $status
 }
 
 # Retry loop to fetch the join command
 retries=0
-max_retries=10
+max_retries=15
 while true; do
   if [[ $retries -ge $max_retries ]]; then
     echo "Maximum retries reached. Join command is still not available or can't be fetched."
     exit 1
   fi
+
   # Capture both output and exit status
-  JOIN_COMMAND=$(fetch_join_command || true) # Prevent immediate exit on failure
+  JOIN_COMMAND=$(fetch_join_command)
   EXIT_STATUS=$?
 
   # Check if the command succeeded
-  if [ $EXIT_STATUS -eq 0 ]; then
+  if [ $EXIT_STATUS -eq 0 ] && [ -n "$JOIN_COMMAND" ] && [[ "$JOIN_COMMAND" != *"ResourceNotFoundException"* ]]; then
     echo "Successfully retrieved join command."
     break
-  elif [[ "$JOIN_COMMAND" == *"ResourceNotFoundException"* ]]; then
-    echo "Secret not found yet, retrying in 15 seconds..."
   else
-    echo "An unexpected error occurred: $JOIN_COMMAND"
+    echo "An error occurred: $JOIN_COMMAND."
   fi
 
   # Wait before retrying
@@ -191,9 +199,8 @@ while true; do
   sleep 60
 done
 
-echo $JOIN_COMMAND
-
-# Run the kubeadm join command
+# Print and run the join command
+echo "Executing: $JOIN_COMMAND"
 eval "$JOIN_COMMAND"
 
 echo -e "Done bootstrapping Worker Node.\n"

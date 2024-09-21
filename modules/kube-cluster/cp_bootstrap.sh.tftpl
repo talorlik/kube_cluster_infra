@@ -159,9 +159,9 @@ providers:
     apiVersion: credentialprovider.kubelet.k8s.io/v1
 CRED_EOF
 
-sudo systemctl restart kubelet
+# sudo systemctl restart kubelet
 
-sleep 60
+# sleep 60
 
 sudo tee /etc/kubernetes/cluster-config.yaml <<CONF_EOF > /dev/null
 apiVersion: kubeadm.k8s.io/v1beta3
@@ -220,7 +220,7 @@ update_join_command() {
 }
 
 # Add cron job to regenerate the join command every 23 hours
-(crontab -l 2>/dev/null; echo "0 */23 * * * $(which bash) -c 'update_join_command'") | crontab -
+(sudo crontab -l 2>/dev/null; echo "0 */23 * * * $(which bash) -c 'update_join_command'") | sudo crontab -
 
 echo -e "Done bootstrapping Control Plane.\n"
 EOF

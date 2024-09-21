@@ -128,29 +128,37 @@ sudo apt-get install -y kubectl helm
 
 # Function to fetch the kube config from Secrets Manager
 fetch_kube_config() {
-  aws secretsmanager get-secret-value --secret-id ${kube_config_secret_name} --region ${aws_region} --query SecretString --output text 2>&1
+  # Disable immediate exit on error for this command
+  set +e
+  local output=$(aws secretsmanager get-secret-value --secret-id "${kube_config_secret_name}" --region "${aws_region}" --query SecretString --output text 2>&1)
+  local status=$?
+  # Re-enable immediate exit on error
+  set -e
+  # Return the output
+  echo -e "$output"
+  # Return the exit status
+  return $status
 }
 
 # Retry loop to fetch the Kube config
 retries=0
-max_retries=10
+max_retries=15
 while true; do
   if [[ $retries -ge $max_retries ]]; then
     echo "Maximum retries reached. Kube config is still not available or can't be fetched."
     exit 1
   fi
+
   # Capture both output and exit status
-  KUBE_CONFIG=$(fetch_kube_config || true) # Prevent immediate exit on failure
+  KUBE_CONFIG=$(fetch_kube_config)
   EXIT_STATUS=$?
 
   # Check if the command succeeded
-  if [ $EXIT_STATUS -eq 0 ]; then
+  if [ $EXIT_STATUS -eq 0 ] && [ -n "$KUBE_CONFIG" ] && [[ "$KUBE_CONFIG" != *"ResourceNotFoundException"* ]]; then
     echo "Successfully retrieved Kube config."
     break
-  elif [[ "$KUBE_CONFIG" == *"ResourceNotFoundException"* ]]; then
-    echo "Secret not found yet, retrying in 15 seconds..."
   else
-    echo "An unexpected error occurred: $KUBE_CONFIG"
+    echo "An error occurred: $KUBE_CONFIG"
   fi
 
   # Wait before retrying
