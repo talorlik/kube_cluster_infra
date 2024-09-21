@@ -143,6 +143,7 @@ fetch_kube_config() {
 # Retry loop to fetch the Kube config
 retries=0
 max_retries=15
+backoff_time=30
 while true; do
   if [[ $retries -ge $max_retries ]]; then
     echo "Maximum retries reached. Kube config is still not available or can't be fetched."
@@ -162,9 +163,10 @@ while true; do
   fi
 
   # Wait before retrying
-  echo "Waiting to retry to fetch Kube config... Retry #$((retries + 1))"
+  echo "Waiting $backoff_time seconds to retry fetching the Kube config..."
+  sleep $backoff_time
+  ((backoff_time *= 2))
   ((retries++))
-  sleep 60
 done
 
 if ! [ -d $HOME/.kube ]; then

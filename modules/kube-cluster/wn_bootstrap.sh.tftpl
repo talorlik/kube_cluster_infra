@@ -175,6 +175,7 @@ fetch_join_command() {
 # Retry loop to fetch the join command
 retries=0
 max_retries=15
+backoff_time=30
 while true; do
   if [[ $retries -ge $max_retries ]]; then
     echo "Maximum retries reached. Join command is still not available or can't be fetched."
@@ -194,9 +195,10 @@ while true; do
   fi
 
   # Wait before retrying
-  echo "Waiting to retry fetching the join command... Retry #$((retries + 1))"
+  echo "Waiting $backoff_time seconds to retry fetching the join command..."
+  sleep $backoff_time
+  ((backoff_time *= 2))
   ((retries++))
-  sleep 60
 done
 
 # Print and run the join command
