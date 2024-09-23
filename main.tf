@@ -148,73 +148,6 @@ module "wn_sg" {
   )
 }
 
-########## Additional rules for Security Groups ##########
-################### Control Plane ########################
-resource "aws_vpc_security_group_ingress_rule" "cp_kube_api_from_wn" {
-  security_group_id            = module.cp_sg.id
-  from_port                    = 6443
-  to_port                      = 6443
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = module.wn_sg.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "cp_etcd_from_self" {
-  security_group_id            = module.cp_sg.id
-  from_port                    = 2379
-  to_port                      = 2380
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = module.cp_sg.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "cp_kubelet_api_from_wn" {
-  security_group_id            = module.cp_sg.id
-  from_port                    = 10250
-  to_port                      = 10250
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = module.wn_sg.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "cp_kube_controller_manager_from_self" {
-  security_group_id            = module.cp_sg.id
-  from_port                    = 10257
-  to_port                      = 10257
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = module.cp_sg.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "cp_kube_scheduler_from_self" {
-  security_group_id            = module.cp_sg.id
-  from_port                    = 10259
-  to_port                      = 10259
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = module.cp_sg.id
-}
-
-################### Worker Nodes ########################
-resource "aws_vpc_security_group_ingress_rule" "wn_kubelet_api_from_cp" {
-  security_group_id            = module.wn_sg.id
-  from_port                    = 10250
-  to_port                      = 10250
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = module.cp_sg.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "wn_kube_proxy_from_cp" {
-  security_group_id            = module.wn_sg.id
-  from_port                    = 10256
-  to_port                      = 10256
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = module.cp_sg.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "wn_flannel_vxlan_from_wn" {
-  security_group_id            = module.wn_sg.id
-  from_port                    = 8472
-  to_port                      = 8472
-  ip_protocol                  = "udp"
-  referenced_security_group_id = module.wn_sg.id
-}
-
 ################ ALB Security Group #####################
 module "alb_sg" {
   source = "./modules/security-group"
@@ -234,13 +167,13 @@ module "alb_sg" {
   )
 }
 
-resource "aws_vpc_security_group_egress_rule" "alb_direct_traffic_to_worker_nodes" {
-  security_group_id            = module.alb_sg.id
-  from_port                    = 8443
-  to_port                      = 8443
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = module.wn_sg.id
-}
+# resource "aws_vpc_security_group_egress_rule" "alb_direct_traffic_to_worker_nodes" {
+#   security_group_id            = module.alb_sg.id
+#   from_port                    = 8443
+#   to_port                      = 8443
+#   ip_protocol                  = "tcp"
+#   referenced_security_group_id = module.wn_sg.id
+# }
 
 ########### Control Plane EC2 Key Pair ###############
 

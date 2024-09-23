@@ -44,26 +44,26 @@ cp_sg_ingress_rules = [
     from_port       = 22
     to_port         = 22
     protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
     from_port       = -1
     to_port         = -1
     protocol        = "icmp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
-    from_port       = 53
-    to_port         = 53
+    from_port       = -1
+    to_port         = -1
     protocol        = "tcp"
     cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
-    from_port       = 53
-    to_port         = 53
+    from_port       = -1
+    to_port         = -1
     protocol        = "udp"
     cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
@@ -87,61 +87,26 @@ wn_sg_ingress_rules = [
     from_port       = 22
     to_port         = 22
     protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
     from_port       = -1
     to_port         = -1
     protocol        = "icmp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
-    from_port       = 53
-    to_port         = 53
+    from_port       = -1
+    to_port         = -1
     protocol        = "tcp"
     cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
-    from_port       = 53
-    to_port         = 53
-    protocol        = "udp"
-    cidr_blocks     = ["10.0.0.0/16"]
-    security_groups = []
-  },
-  {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
-    security_groups = []
-  },
-  {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
-    security_groups = []
-  },
-  {
-    from_port       = 8443
-    to_port         = 8443
-    protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
-    security_groups = []
-  },
-  {
-    from_port       = 30000
-    to_port         = 32767
-    protocol        = "tcp"
-    cidr_blocks     = ["10.0.0.0/16"]
-    security_groups = []
-  },
-  {
-    from_port       = 30000
-    to_port         = 32767
+    from_port       = -1
+    to_port         = -1
     protocol        = "udp"
     cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
@@ -183,11 +148,11 @@ wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v7a"
-sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v7a"
-join_secret_name                 = "kubeadm/join-details/v7a"
-kube_config_secret_name          = "kube/config/v7a"
-kube_dashboard_token_secret_name = "kube/dashboard-token/v7a"
+sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v7b"
+sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v7b"
+join_secret_name                 = "kubeadm/join-details/v7b"
+kube_config_secret_name          = "kube/config/v7b"
+kube_dashboard_token_secret_name = "kube/dashboard-token/v7b"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"

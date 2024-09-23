@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 
 # Disable systemd-resolved
 systemctl stop systemd-resolved
@@ -114,8 +113,6 @@ for package in libc6 groff less unzip curl ca-certificates gnupg gpg jq software
 done
 
 sudo -u ubuntu -i <<'EOF'
-set -euo pipefail
-
 # Check if AWS CLI is installed and if not install and verify it
 if ! command -v aws &> /dev/null; then
   curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -178,12 +175,8 @@ CRED_EOF
 
 # Function to fetch the join command from Secrets Manager
 fetch_join_command() {
-  # Disable immediate exit on error for this command
-  set +e
   local output=$(aws secretsmanager get-secret-value --secret-id "${join_secret_name}" --region "${aws_region}" --query SecretString --output text 2>&1)
   local status=$?
-  # Re-enable immediate exit on error
-  set -e
   # Return the output
   echo "$output"
   # Return the exit status

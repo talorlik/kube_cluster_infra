@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 
 # Disable systemd-resolved
 systemctl stop systemd-resolved
@@ -76,8 +75,6 @@ for package in libc6 groff less unzip apt-transport-https ca-certificates curl g
 done
 
 sudo -u ubuntu -i <<'EOF'
-set -euo pipefail
-
 # Check if AWS Cli is installed and if not install and verify it
 if ! command -v aws &> /dev/null; then
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -131,12 +128,8 @@ sudo apt-get install -y kubectl helm
 
 # Function to fetch the kube config from Secrets Manager
 fetch_kube_config() {
-  # Disable immediate exit on error for this command
-  set +e
   local output=$(aws secretsmanager get-secret-value --secret-id "${kube_config_secret_name}" --region "${aws_region}" --query SecretString --output text 2>&1)
   local status=$?
-  # Re-enable immediate exit on error
-  set -e
   # Return the output
   echo -e "$output"
   # Return the exit status
