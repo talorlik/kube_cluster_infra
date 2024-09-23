@@ -114,14 +114,14 @@ wn_sg_ingress_rules = [
   {
     from_port       = 80
     to_port         = 80
-    protocol        = "http"
+    protocol        = "tcp"
     cidr_blocks     = ["0.0.0.0/0"]
     security_groups = []
   },
   {
     from_port       = 443
     to_port         = 443
-    protocol        = "https"
+    protocol        = "tcp"
     cidr_blocks     = ["0.0.0.0/0"]
     security_groups = []
   },
@@ -183,11 +183,11 @@ wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v6d"
-sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v6d"
-join_secret_name                 = "kubeadm/join-details/v6d"
-kube_config_secret_name          = "kube/config/v6d"
-kube_dashboard_token_secret_name = "kube/dashboard-token/v6d"
+sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v7"
+sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v7"
+join_secret_name                 = "kubeadm/join-details/v7"
+kube_config_secret_name          = "kube/config/v7"
+kube_dashboard_token_secret_name = "kube/dashboard-token/v7"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"
