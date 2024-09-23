@@ -150,7 +150,7 @@ module "wn_sg" {
 
 ########## Additional rules for Security Groups ##########
 ################### Control Plane ########################
-resource "aws_vpc_security_group_ingress_rule" "cp_allow_api_from_wn" {
+resource "aws_vpc_security_group_ingress_rule" "cp_kube_api_from_wn" {
   security_group_id            = module.cp_sg.id
   from_port                    = 6443
   to_port                      = 6443
@@ -158,15 +158,15 @@ resource "aws_vpc_security_group_ingress_rule" "cp_allow_api_from_wn" {
   referenced_security_group_id = module.wn_sg.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "cp_allow_etcd_from_wn" {
+resource "aws_vpc_security_group_ingress_rule" "cp_etcd_from_self" {
   security_group_id            = module.cp_sg.id
   from_port                    = 2379
   to_port                      = 2380
   ip_protocol                  = "tcp"
-  referenced_security_group_id = module.wn_sg.id
+  referenced_security_group_id = module.cp_sg.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "cp_allow_kubelet_from_wn" {
+resource "aws_vpc_security_group_ingress_rule" "cp_kubelet_api_from_wn" {
   security_group_id            = module.cp_sg.id
   from_port                    = 10250
   to_port                      = 10250
@@ -174,8 +174,24 @@ resource "aws_vpc_security_group_ingress_rule" "cp_allow_kubelet_from_wn" {
   referenced_security_group_id = module.wn_sg.id
 }
 
+resource "aws_vpc_security_group_ingress_rule" "cp_kube_controller_manager_from_self" {
+  security_group_id            = module.cp_sg.id
+  from_port                    = 10257
+  to_port                      = 10257
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = module.cp_sg.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cp_kube_scheduler_from_self" {
+  security_group_id            = module.cp_sg.id
+  from_port                    = 10259
+  to_port                      = 10259
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = module.cp_sg.id
+}
+
 ################### Worker Nodes ########################
-resource "aws_vpc_security_group_ingress_rule" "wn_allow_kubelet_from_cp" {
+resource "aws_vpc_security_group_ingress_rule" "wn_kubelet_api_from_cp" {
   security_group_id            = module.wn_sg.id
   from_port                    = 10250
   to_port                      = 10250
@@ -183,20 +199,20 @@ resource "aws_vpc_security_group_ingress_rule" "wn_allow_kubelet_from_cp" {
   referenced_security_group_id = module.cp_sg.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "wn_allow_flannel_vxlan_from_wn" {
+resource "aws_vpc_security_group_ingress_rule" "wn_kube_proxy_from_cp" {
+  security_group_id            = module.wn_sg.id
+  from_port                    = 10256
+  to_port                      = 10256
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = module.cp_sg.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "wn_flannel_vxlan_from_wn" {
   security_group_id            = module.wn_sg.id
   from_port                    = 8472
   to_port                      = 8472
   ip_protocol                  = "udp"
   referenced_security_group_id = module.wn_sg.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "wn_allow_nodeport" {
-  security_group_id = module.wn_sg.id
-  from_port         = 30000
-  to_port           = 32767
-  ip_protocol       = "tcp"
-  cidr_ipv4         = "0.0.0.0/0"
 }
 
 ################ ALB Security Group #####################

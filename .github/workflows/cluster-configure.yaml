@@ -154,7 +154,7 @@ jobs:
       SUB_DOMAIN_NAME: ${{ needs.SetGlobals.outputs.common_name }}
       ALB_SG_ID: ${{ needs.SetGlobals.outputs.alb_sg_id }}
       ALB_NAME: "${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }}"
-      ALB_TAGS: "Name=\"${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }}\",Env=\"${{ inputs.environment }}\",Terraform=\"true\",\"kubernetes.io/cluster/${{ needs.SetGlobals.outputs.cluster_name }}\"=\"owned\""
+      ALB_TAGS: "\"Name=${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }}\",\"Env=${{ inputs.environment }}\",\"Terraform=true\",\"kubernetes.io/cluster/${{ needs.SetGlobals.outputs.cluster_name }}=owned\""
       BASTION_PUBLIC_IP: ${{ needs.SetGlobals.outputs.bastion_public_ip }}
       KUBE_DASHBOARD_TOKEN_SECRET_NAME: ${{ needs.SetGlobals.outputs.kube_dashboard_token_secret_name }}
       KUBE_DASHBOARD_TOKEN_SECRET_TAGS: ${{ needs.SetGlobals.outputs.kube_dashboard_token_secret_tags }}
@@ -192,7 +192,7 @@ jobs:
           helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
           helm repo update
 
-          sudo tee $HOME/kubernetes/ebs-csi-values.yaml <<EBS_EOF > /dev/null
+          tee $HOME/kubernetes/ebs-csi-values.yaml <<EBS_EOF > /dev/null
           storageClasses:
             - name: ebs-sc
               annotations:
@@ -214,7 +214,7 @@ jobs:
           helm repo update
           helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
 
-          sudo tee $HOME/kubernetes/k8s-dashboard-user.yaml <<DASH_EOF > /dev/null
+          tee $HOME/kubernetes/k8s-dashboard-user.yaml <<DASH_EOF > /dev/null
           apiVersion: v1
           kind: ServiceAccount
           metadata:
@@ -260,14 +260,14 @@ jobs:
           --namespace ingress-nginx \
           --create-namespace \
           --set controller.service.type=NodePort \
-          --set controller.service.nodePorts.https=8443
+          --set controller.service.nodePorts.https=30443
 
           kubectl create secret tls tls-secret \
           --namespace ingress-nginx \
           --cert=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_BODY_SECRET_NAME }}" --query SecretString --output text) \
           --key=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_KEY_SECRET_NAME }}" --query SecretString --output text)
 
-          sudo tee $HOME/kubernetes/alb-ingress-connect-nginx.yaml <<ING_EOF > /dev/null
+          tee $HOME/kubernetes/alb-ingress-connect-nginx.yaml <<ING_EOF > /dev/null
           apiVersion: networking.k8s.io/v1
           kind: Ingress
           metadata:
@@ -281,16 +281,16 @@ jobs:
 
               # Health Check Settings
               alb.ingress.kubernetes.io/healthcheck-protocol: 'HTTPS'
-              alb.ingress.kubernetes.io/healthcheck-port: 8443
+              alb.ingress.kubernetes.io/healthcheck-port: '8443'
               alb.ingress.kubernetes.io/healthcheck-path: '/health'
-              alb.ingress.kubernetes.io/healthcheck-interval-seconds: 30
-              alb.ingress.kubernetes.io/healthcheck-timeout-seconds: 5
+              alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+              alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
               alb.ingress.kubernetes.io/success-codes: '200-399,404'
-              alb.ingress.kubernetes.io/healthy-threshold-count: 5
-              alb.ingress.kubernetes.io/unhealthy-threshold-count: 2
+              alb.ingress.kubernetes.io/healthy-threshold-count: '5'
+              alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
 
               # SSL Settings
-              alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTPS":8443}]'
+              alb.ingress.kubernetes.io/listen-ports: '[{\"HTTPS\":\"443\"}, {\"HTTPS\":\"8443\"}]'
               alb.ingress.kubernetes.io/certificate-arn: '${{ env.CERTIFICATE_ARN }}'
               nginx.ingress.kubernetes.io/backend-protocol: 'HTTPS'
               nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
@@ -321,7 +321,7 @@ jobs:
             - hosts:
               - "${{ env.SUB_DOMAIN_NAME }}"
               secretName: tls-secret
-            ingressClassName: nginx
+            ingressClassName: alb
           ING_EOF
 
           kubectl apply -f $HOME/kubernetes/alb-ingress-connect-nginx.yaml

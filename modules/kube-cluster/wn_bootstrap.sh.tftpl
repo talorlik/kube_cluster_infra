@@ -51,6 +51,9 @@ EOF
 # apply sysctl params without reboot
 sysctl --system
 
+# disable firewall
+ufw disable
+
 # disable swap memory
 sudo swapoff -a
 
@@ -70,6 +73,21 @@ if ! lsmod | grep -q br_netfilter; then
   fi
 else
   echo "br_netfilter module is already loaded."
+fi
+
+# Check if the module is loaded
+if ! lsmod | grep -q overlay; then
+  echo "overlay module is not loaded. Loading it now..."
+  sudo modprobe overlay
+
+  # Verify that the module was loaded successfully
+  if lsmod | grep -q overlay; then
+    echo "overlay module loaded successfully."
+  else
+    echo "Failed to load overlay module."
+  fi
+else
+  echo "overlay module is already loaded."
 fi
 
 # Function to check if a package is installed

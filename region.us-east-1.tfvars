@@ -38,10 +38,25 @@ wn_iam_assume_role_policy = {
 }
 ### Controle Plane Security Group ###
 cp_sg_name = "cp-sg"
+### Ingress ###
 cp_sg_ingress_rules = [
   {
     from_port       = 22
     to_port         = 22
+    protocol        = "tcp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = -1
+    to_port         = -1
+    protocol        = "icmp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = 53
+    to_port         = 53
     protocol        = "tcp"
     cidr_blocks     = ["0.0.0.0/0"]
     security_groups = []
@@ -52,15 +67,9 @@ cp_sg_ingress_rules = [
     protocol        = "udp"
     cidr_blocks     = ["0.0.0.0/0"]
     security_groups = []
-  },
-  {
-    from_port       = -1
-    to_port         = -1
-    protocol        = "icmp"
-    cidr_blocks     = ["0.0.0.0/0"]
-    security_groups = []
   }
 ]
+### Egress ###
 cp_sg_egress_rules = [
   {
     from_port       = 0
@@ -72,10 +81,25 @@ cp_sg_egress_rules = [
 ]
 ### Worker Nodes Security Group ###
 wn_sg_name = "wn-sg"
+### Ingress ###
 wn_sg_ingress_rules = [
   {
     from_port       = 22
     to_port         = 22
+    protocol        = "tcp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = -1
+    to_port         = -1
+    protocol        = "icmp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = 53
+    to_port         = 53
     protocol        = "tcp"
     cidr_blocks     = ["0.0.0.0/0"]
     security_groups = []
@@ -88,13 +112,42 @@ wn_sg_ingress_rules = [
     security_groups = []
   },
   {
-    from_port       = -1
-    to_port         = -1
-    protocol        = "icmp"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "http"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "https"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = 8443
+    to_port         = 8443
+    protocol        = "tcp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = 30000
+    to_port         = 32767
+    protocol        = "tcp"
+    cidr_blocks     = ["0.0.0.0/0"]
+    security_groups = []
+  },
+  {
+    from_port       = 30000
+    to_port         = 32767
+    protocol        = "udp"
     cidr_blocks     = ["0.0.0.0/0"]
     security_groups = []
   }
 ]
+### Egress ###
 wn_sg_egress_rules = [
   {
     from_port       = 0
@@ -130,11 +183,11 @@ wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v6c"
-sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v6c"
-join_secret_name                 = "kubeadm/join-details/v6c"
-kube_config_secret_name          = "kube/config/v6c"
-kube_dashboard_token_secret_name = "kube/dashboard-token/v6c"
+sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v6d"
+sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v6d"
+join_secret_name                 = "kubeadm/join-details/v6d"
+kube_config_secret_name          = "kube/config/v6d"
+kube_dashboard_token_secret_name = "kube/dashboard-token/v6d"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"
