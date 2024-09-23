@@ -58,14 +58,14 @@ cp_sg_ingress_rules = [
     from_port       = 53
     to_port         = 53
     protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
     from_port       = 53
     to_port         = 53
     protocol        = "udp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   }
 ]
@@ -101,14 +101,14 @@ wn_sg_ingress_rules = [
     from_port       = 53
     to_port         = 53
     protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
     from_port       = 53
     to_port         = 53
     protocol        = "udp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
@@ -136,14 +136,14 @@ wn_sg_ingress_rules = [
     from_port       = 30000
     to_port         = 32767
     protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   },
   {
     from_port       = 30000
     to_port         = 32767
     protocol        = "udp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    cidr_blocks     = ["10.0.0.0/16"]
     security_groups = []
   }
 ]
@@ -183,11 +183,11 @@ wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v7"
-sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v7"
-join_secret_name                 = "kubeadm/join-details/v7"
-kube_config_secret_name          = "kube/config/v7"
-kube_dashboard_token_secret_name = "kube/dashboard-token/v7"
+sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v7a"
+sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v7a"
+join_secret_name                 = "kubeadm/join-details/v7a"
+kube_config_secret_name          = "kube/config/v7a"
+kube_dashboard_token_secret_name = "kube/dashboard-token/v7a"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"
