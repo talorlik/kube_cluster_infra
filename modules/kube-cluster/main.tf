@@ -382,7 +382,7 @@ resource "aws_iam_role_policy" "iam_policy_for_hook" {
           "autoscaling:CompleteLifecycleAction" # Required to complete the lifecycle action
         ],
         Resource = [
-          aws_sns_topic.sns_topic.arn,                   # ARN of the SNS topic
+          aws_sns_topic.sns_topic_dereg.arn,             # ARN of the SNS topic
           aws_lambda_function.deregister_node_lambda.arn # (Optional) ARN of Lambda function
         ]
       }
