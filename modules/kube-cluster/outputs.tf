@@ -40,3 +40,7 @@ output "kube_dashboard_token_secret_name" {
 output "kube_dashboard_token_secret_tags" {
   value = local.aws_cli_dashboard_tags
 }
+
+output "lambda_name" {
+  value = aws_lambda_function.deregister_node_lambda.function_name
+}

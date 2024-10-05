@@ -15,7 +15,7 @@ variable "prefix" {
 }
 
 variable "name" {
-  description = "The Name of the Security Group for the Polybot EC2"
+  description = "The Name of the Security Group for the EC2"
   type        = string
 }
 

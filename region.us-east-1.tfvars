@@ -143,8 +143,8 @@ alb_sg_ingress_rules = [
 ### Kubernetes Cluster ###
 k8s_version      = "v1.31"
 cluster_name     = "kube-cluster"
-cp_instance_type = "t3.medium"
-wn_instance_type = "t3.medium"
+cp_instance_type = "t3.large"
+wn_instance_type = "t3.large"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###

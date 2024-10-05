@@ -1,0 +1,149 @@
+name: Kubernetes Cluster WD Deregistration Lambda Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Select AWS Account'
+        required: true
+        type: choice
+        default: '019273956931'
+        options:
+          - '019273956931'
+      region:
+        description: 'Select AWS Region'
+        required: true
+        type: choice
+        default: 'us-east-1: N. Virginia'
+        options:
+          - 'us-east-1: N. Virginia'
+          - 'us-east-2: Ohio'
+      environment:
+        description: 'Select Environment'
+        required: true
+        type: choice
+        default: prod
+        options:
+          - prod
+          - dev
+
+jobs:
+  GetRunId:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.set_run_id.outputs.run_id }}
+    steps:
+      - name: Check and Install curl
+        run: |
+          if ! command -v curl &> /dev/null
+          then
+            echo "curl could not be found. Installing curl..."
+            sudo apt-get update
+            sudo apt-get install -y curl
+          else
+            echo "curl is already installed."
+          fi
+
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Fetch the latest successful workflow run ID from the Infra Deployment
+        id: set_run_id
+        run: |
+          LATEST_SUCCESS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/talorlik/kube_cluster_infra/actions/workflows/infra-provisioning-region.yaml/runs?status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id')
+
+          echo "run_id=$LATEST_SUCCESS" >> $GITHUB_OUTPUT
+
+          echo "The latest successful run ID is $LATEST_SUCCESS"
+
+  SetGlobals:
+    runs-on: ubuntu-latest
+    needs:
+      - GetRunId
+    outputs:
+      region_code: ${{ steps.set_region.outputs.region_code }}
+      kube_config_secret_name: ${{ steps.set_values.outputs.kube_config_secret_name }}
+      lambda_name: ${{ steps.set_values.outputs.lambda_name }}
+    steps:
+      - name: Install supporting Ubuntu packages
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Set Region
+        id: set_region
+        run: |
+          SELECTED_REGION="${{ inputs.region }}"
+          echo "region_code=${SELECTED_REGION%%:*}" >> $GITHUB_OUTPUT
+
+      - name: Download Output JSON file
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          github-token: "${{ secrets.GH_TOKEN }}"
+          repository: talorlik/kube_cluster_infra
+          run-id: ${{ needs.GetRunId.outputs.run_id }}
+
+      - name: Extract outputs from file and set as environment variables
+        id: set_values
+        env:
+          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+        run: |
+          echo "kube_config_secret_name=$(jq -r '.kube_config_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "lambda_name=$(jq -r '.lambda_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+  UpdateLambda:
+    runs-on: ubuntu-latest
+    needs:
+      - SetGlobals
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Install supporting Ubuntu packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc6 groff less unzip curl zip ca-certificates gnupg gpg jq software-properties-common apt-transport-https
+
+      - name: Install AWS Cli
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install
+          aws --version
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Replace KubeConfig Secret Placeholder with Actual Secret Name
+        run: |
+          sed -i "s/REPLACE_WITH_KUBE_CONF_SECRET_NAME/${{ needs.SetGlobals.outputs.kube_config_secret_name }}/g" ${{ github.workspace }}/modules/kube-cluster/lambda/lambda_function.py
+
+      - name: Zip Lambda Function
+        run: |
+          cd ${{ github.workspace }}/modules/kube-cluster/lambda
+          zip ${{ github.workspace }}/function.zip lambda_function.py
+
+      - name: Update Lambda Function Code
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ needs.SetGlobals.outputs.lambda_name }} \
+            --zip-file fileb://${{ github.workspace }}/function.zip \
+            --region ${{ needs.SetGlobals.outputs.region_code }}

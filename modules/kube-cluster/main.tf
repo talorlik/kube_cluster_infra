@@ -4,7 +4,9 @@ locals {
   wn_ec2_name                      = "${var.prefix}-${var.region}-${var.wn_instance_name}-${var.env}"
   asg_name                         = "${var.prefix}-${var.region}-${var.asg_name}-${var.env}"
   sns_topic_name                   = "${var.prefix}-${var.region}-${var.sns_topic_name}-${var.env}"
+  sns_topic_dereg_name             = "${var.prefix}-${var.region}-${var.sns_topic_dereg_name}-${var.env}"
   autoscaling_policy_name          = "${var.prefix}-${var.region}-${var.autoscaling_policy_name}-${var.env}"
+  lambda_name                      = "${var.prefix}-${var.region}-${var.lambda_name}-${var.env}"
   join_secret_name                 = "${var.prefix}/${var.region}/${var.join_secret_name}/${var.env}"
   kube_config_secret_name          = "${var.prefix}/${var.region}/${var.kube_config_secret_name}/${var.env}"
   kube_dashboard_token_secret_name = "${var.prefix}/${var.region}/${var.kube_dashboard_token_secret_name}/${var.env}"
@@ -82,6 +84,7 @@ resource "aws_instance" "cp_ec2" {
     {
       Name                                        = "${local.cp_ec2_name}"
       SSH                                         = "control_plane"
+      MachineRole                                 = "control_plane"
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
       "node-role.kubernetes.io/control-plane"     = "1"
     },
@@ -136,6 +139,7 @@ resource "aws_launch_template" "launch_template" {
     tags = merge(
       {
         Name                                        = "${local.wn_ec2_name}"
+        MachineRole                                 = "worker_node"
         "kubernetes.io/cluster/${var.cluster_name}" = "owned"
         "node-role.kubernetes.io/node"              = "1"
       },
@@ -223,7 +227,7 @@ resource "aws_autoscaling_policy" "avg_cpu_policy" {
   name = local.autoscaling_policy_name
   # The policy type may be either "SimpleScaling", "StepScaling" or "TargetTrackingScaling". If this value isn't provided, AWS will default to "SimpleScaling."
   policy_type            = var.policy_type
-  autoscaling_group_name = aws_autoscaling_group.asg.id
+  autoscaling_group_name = aws_autoscaling_group.asg.name
   # CPU Utilization is above 50
   target_tracking_configuration {
     dynamic "predefined_metric_specification" {
@@ -235,4 +239,155 @@ resource "aws_autoscaling_policy" "avg_cpu_policy" {
     target_value     = var.target_tracking_configuration.target_value
     disable_scale_in = var.target_tracking_configuration.disable_scale_in
   }
+}
+
+############# SNS - Deregister Topic ####################
+resource "aws_sns_topic" "sns_topic_dereg" {
+  name = local.sns_topic_dereg_name
+}
+
+############ SNS - Deregister Subscription #############
+resource "aws_sns_topic_subscription" "sns_topic_subscription_dereg" {
+  topic_arn = aws_sns_topic.sns_topic_dereg.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.deregister_node_lambda.arn
+}
+
+############ SNS - Deregister Topic Policy #############
+resource "aws_sns_topic_policy" "sns_topic_dereg_policy" {
+  arn = aws_sns_topic.sns_topic_dereg.arn
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect    = "Allow",
+        Principal = "*",
+        Action    = "SNS:Publish",
+        Resource  = aws_sns_topic.sns_topic_dereg.arn,
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_autoscaling_group.asg.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+################### Deregister Lambda ########################
+resource "aws_iam_role" "lambda_role" {
+  name = "deregister-node-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_policy" {
+  name = "deregister-node-policy"
+  role = aws_iam_role.lambda_role.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        Resource = "*"
+      },
+      {
+        Sid    = "ReadSpecificSecret",
+        Effect = "Allow",
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ],
+        Resource = "*"
+      },
+      {
+        Sid      = "DescribeEC2Instances"
+        Effect   = "Allow",
+        Action   = "ec2:DescribeInstances",
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_function" "deregister_node_lambda" {
+  function_name = local.lambda_name
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "python3.12"
+  handler       = "lambda_function.lambda_handler"
+}
+
+resource "aws_lambda_permission" "allow_sns" {
+  statement_id  = "AllowExecutionFromSNS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.deregister_node_lambda.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.sns_topic_dereg.arn
+}
+
+################### Lifecycle Hook ########################
+resource "aws_iam_role" "iam_role_for_hook" {
+  name = "asg-lifecycle-hook-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "autoscaling.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "iam_policy_for_hook" {
+  name = "asg-lifecycle-hook-policy"
+  role = aws_iam_role.iam_role_for_hook.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "sns:Publish",                        # Permission to publish to SNS
+          "lambda:InvokeFunction",              # (Optional) If invoking Lambda directly
+          "autoscaling:CompleteLifecycleAction" # Required to complete the lifecycle action
+        ],
+        Resource = [
+          aws_sns_topic.sns_topic.arn,                   # ARN of the SNS topic
+          aws_lambda_function.deregister_node_lambda.arn # (Optional) ARN of Lambda function
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_autoscaling_lifecycle_hook" "terminate_hook" {
+  name                    = "TerminateHook"
+  autoscaling_group_name  = aws_autoscaling_group.asg.name
+  lifecycle_transition    = "autoscaling:EC2_INSTANCE_TERMINATING"
+  default_result          = "CONTINUE"
+  heartbeat_timeout       = 300
+  notification_target_arn = aws_sns_topic.sns_topic_dereg.arn  # SNS Topic or Lambda function
+  role_arn                = aws_iam_role.iam_role_for_hook.arn # IAM role for the hook
 }

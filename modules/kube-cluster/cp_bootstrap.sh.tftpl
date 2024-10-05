@@ -15,6 +15,9 @@ search ec2.internal
 options edns0 trust-ad
 EOF
 
+# change hostname to a full form
+hostname | grep -E '^ip-[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,3}$' &&  hostnamectl set-hostname $(hostname).ec2.internal
+
 # Disable IPv6 via sysctl
 
 # Append settings to sysctl.conf to disable IPv6

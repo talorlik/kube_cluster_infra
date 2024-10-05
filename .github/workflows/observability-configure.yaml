@@ -1,0 +1,547 @@
+name: Observability Install and Configure
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Select AWS Account'
+        required: true
+        type: choice
+        default: '019273956931'
+        options:
+          - '019273956931'
+      region:
+        description: 'Select AWS Region'
+        required: true
+        type: choice
+        default: 'us-east-1: N. Virginia'
+        options:
+          - 'us-east-1: N. Virginia'
+          - 'us-east-2: Ohio'
+      environment:
+        description: 'Select Environment'
+        required: true
+        type: choice
+        default: prod
+        options:
+          - prod
+          - dev
+
+jobs:
+  GetRunId:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.set_run_id.outputs.run_id }}
+    steps:
+      - name: Check and Install curl
+        run: |
+          if ! command -v curl &> /dev/null
+          then
+            echo "curl could not be found. Installing curl..."
+            sudo apt-get update
+            sudo apt-get install -y curl
+          else
+            echo "curl is already installed."
+          fi
+
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Fetch the latest successful workflow run ID from the Infra Deployment
+        id: set_run_id
+        run: |
+          LATEST_SUCCESS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/talorlik/kube_cluster_infra/actions/workflows/infra-provisioning-region.yaml/runs?status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id')
+
+          echo "run_id=$LATEST_SUCCESS" >> $GITHUB_OUTPUT
+
+          echo "The latest successful run ID is $LATEST_SUCCESS"
+
+  SetGlobals:
+    runs-on: ubuntu-latest
+    needs:
+      - GetRunId
+    outputs:
+      region_code: ${{ steps.set_region.outputs.region_code }}
+      bastion_pem_file_name: ${{ steps.set_values.outputs.bastion_pem_file_name }}
+      bastion_public_ip: ${{ steps.set_values.outputs.bastion_public_ip }}
+      common_name: ${{ steps.set_values.outputs.common_name }}
+    steps:
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Set Region
+        id: set_region
+        run: |
+          SELECTED_REGION="${{ inputs.region }}"
+          echo "region_code=${SELECTED_REGION%%:*}" >> $GITHUB_OUTPUT
+
+      - name: Download Output JSON file
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          github-token: "${{ secrets.GH_TOKEN }}"
+          repository: talorlik/kube_cluster_infra
+          run-id: ${{ needs.GetRunId.outputs.run_id }}
+
+      - name: Extract outputs from file and set as environment variables
+        id: set_values
+        env:
+          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+        run: |
+          echo "bastion_pem_file_name=$(jq -r '.bastion_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "bastion_public_ip=$(jq -r '.bastion_public_ip.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "common_name=$(jq -r '.common_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+  Configure:
+    runs-on: ubuntu-latest
+    needs:
+      - GetRunId
+      - SetGlobals
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ needs.SetGlobals.outputs.region_code }}
+      LOCAL_PATH: /home/runner/.ssh
+      BASTION_PEM_FILE_NAME: ${{ needs.SetGlobals.outputs.bastion_pem_file_name }}
+      BASTION_PUBLIC_IP: ${{ needs.SetGlobals.outputs.bastion_public_ip }}
+      COMMON_NAME: ${{ needs.SetGlobals.outputs.common_name }}
+    steps:
+      - name: Download Bastion SSH key
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ env.BASTION_PEM_FILE_NAME }}"
+          github-token: "${{ secrets.GH_TOKEN }}"
+          repository: talorlik/kube_cluster_infra
+          run-id: ${{ needs.GetRunId.outputs.run_id }}
+          path: "${{ env.LOCAL_PATH }}"
+
+      - name: Set permissions for SSH key and directory
+        run: |
+          chmod 400 ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
+          chmod 700 ${{ env.LOCAL_PATH }}
+
+      - name: SSH to Bastion and deploy ArgoCD
+        uses: appleboy/ssh-action@v0.1.4
+        with:
+          host: ${{ env.BASTION_PUBLIC_IP }}
+          username: ubuntu
+          key: ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
+          port: 22
+          script: |
+            kubectl create namespace observability
+
+            helm repo add elastic https://helm.elastic.co
+            helm repo update
+
+            # Custom operator values file
+            tee $HOME/kubernetes/eck-operator-values.yaml <<ECK_OP_EOF > /dev/null
+            # Disable telemetry reporting
+            telemetry:
+              disabled: true
+            global:
+              createOperatorNamespace: false
+              kubeVersion: 1.31.0
+            ECK_OP_EOF
+
+            # Custom Elastic + Kibana values file
+            tee $HOME/kubernetes/elasticsearch-kibana-values.yaml <<ELST_EOF > /dev/null
+            # Enable and configure the Elasticsearch resource
+            eck-elasticsearch:
+              enabled: true
+              fullnameOverride: elasticsearch
+              spec:
+                version: "8.15.2"  # Set the version of Elasticsearch you want
+                nodeSets:
+                  - name: default
+                    count: 1  # Set the number of Elasticsearch nodes
+                    config:
+                      node.store.allow_mmap: false
+                    podTemplate:
+                      spec:
+                        containers:
+                          - name: elasticsearch
+                            resources:
+                              requests:
+                                cpu: 1
+                                memory: 2Gi
+                              limits:
+                                cpu: 2
+                                memory: 4Gi
+                        nodeSelector: {}  # Add node selectors if needed
+                        tolerations: []  # Add tolerations if needed
+                    volumeClaimTemplates:
+                      - metadata:
+                          name: elasticsearch-data
+                        spec:
+                          accessModes: [ "ReadWriteOnce" ]
+                          resources:
+                            requests:
+                              storage: 50Gi  # Storage to keep 5 days of data
+                secureSettings:
+                  - secretName: elasticsearch-auth-secret  # Securely store the credentials in a secret
+
+            # Enable and configure the Kibana resource
+            eck-kibana:
+              enabled: true
+              fullnameOverride: kibana
+              spec:
+                version: "8.15.2"  # Same version as Elasticsearch
+                count: 1  # Number of Kibana instances
+                elasticsearchRef:
+                  name: elasticsearch  # Reference to the Elasticsearch resource
+                elasticsearchHosts:
+                  - "http://elasticsearch.default.svc.cluster.local:9200"
+                podTemplate:
+                  spec:
+                    containers:
+                      - name: kibana
+                        resources:
+                          requests:
+                            cpu: 500m
+                            memory: 1Gi
+                          limits:
+                            cpu: 1
+                            memory: 2Gi
+                    nodeSelector: {}  # Add node selectors if needed
+                    tolerations: []  # Add tolerations if needed
+                http:
+                  tls:
+                    selfSignedCertificate:
+                      disabled: true  # Disable self-signed certificates if you handle TLS via Ingress
+                secureSettings:
+                  - secretName: kibana-auth-secret  # Securely store the credentials in a secret
+                # Reference the dashboards
+                # kibanaDashboards:
+                #  enabled: true
+                #  dashboards:
+                #    - title: "System Logs Overview"
+                #      url: "https://your-domain.com/kibana/system-logs.json"  # Path to System Logs Dashboard JSON
+                #    - title: "Kubernetes Logs Overview"
+                #      url: "https://your-domain.com/kibana/kubernetes-logs.json"  # Path to Kubernetes Logs Dashboard JSON
+            ELST_EOF
+
+            # ElasticSearch Data Retention Policy - Index Lifecycle Management (ILM)
+            tee $HOME/kubernetes/elasticsearch-data-retention-policy.yaml <<DRET_EOF > /dev/null
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: create-ilm-policy
+              namespace: observability  # Ensure it's in the same namespace
+            spec:
+              template:
+                spec:
+                  containers:
+                  - name: ilm-policy
+                    image: curlimages/curl:7.68.0
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        curl -X PUT "http://elasticsearch.default.svc.cluster.local:9200/_ilm/policy/logs_retention_policy" \
+                        -H "Content-Type: application/json" \
+                        -d '{
+                          "policy": {
+                            "phases": {
+                              "hot": {
+                                "actions": {
+                                  "rollover": {
+                                    "max_age": "1d",
+                                    "max_size": "50gb"
+                                  }
+                                }
+                              },
+                              "delete": {
+                                "min_age": "5d",
+                                "actions": {
+                                  "delete": {}
+                                }
+                              }
+                            }
+                          }
+                        }'
+                  restartPolicy: OnFailure
+            DRET_EOF
+
+            # Set custom password for both Elastic and Kibana
+            kubectl create secret generic elasticsearch-auth-secret --from-literal=username=admin --from-literal=password=${{ secrets.OBSERVABILITY_PASSWORD }} -n observability
+            kubectl create secret generic kibana-auth-secret --from-literal=username=admin --from-literal=password=${{ secrets.OBSERVABILITY_PASSWORD }} -n observability
+
+            # Install an eck-operator using cusom values
+            helm install elastic-operator elastic/eck-operator -n observability -f $HOME/kubernetes/eck-operator-values.yaml
+
+            # Install an eck-stack with Elasticsearch and Kibana using cusom values
+            helm install eck-stack elastic/eck-stack -n observability -f $HOME/kubernetes/elasticsearch-kibana-values.yaml
+
+            # Instal the ILM
+            kubectl apply -f $HOME/kubernetes/elasticsearch-data-retention-policy.yaml
+
+            # Install Node Exporter for OS and hardware metrics
+            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+            helm update
+            helm install node-exporter prometheus-community/prometheus-node-exporter -n observability
+
+            # Install OpenTelemetry Collector for collecting logs, metrics, and traces
+            helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+            helm update
+
+            tee $HOME/kubernetes/otel-collector-config.yaml <<OTEL_EOF > /dev/null
+            receivers:
+              otlp:
+                protocols:
+                  grpc:
+                  http
+              prometheus:
+                config:
+                  scrape_configs:
+                    - job_name: 'kubernetes-pods'
+                      kubernetes_sd_configs:
+                        - role: pod
+                    - job_name: 'kubernetes-nodes'
+                      kubernetes_sd_configs:
+                        - role: node
+                    - job_name: 'node-exporter'
+                      kubernetes_sd_configs:
+                        - role: node
+                      metrics_path: /metrics
+              filelog_system:
+                include:
+                  - /var/log/syslog  # System logs
+                  - /var/log/auth.log # Auth logs
+                operators:
+                  - type: regex_parser
+                    regex: '^(?P<timestamp>\S+) (?P<severity>\S+) (?P<message>.*)$'
+                    timestamp:
+                      parse_from: timestamp
+                      layout_type: gotime
+                      layout: 2006-01-02T15:04:05.999Z
+                  - type: move
+                    from: message
+                    to: body
+                resource_attributes:
+                  - key: log_type
+                    value: system_log
+              filelog_access:
+                include:
+                  - /var/log/access.log  # Access logs for HTTP services like Nginx or Apache
+                operators:
+                  - type: regex_parser
+                    regex: '^(?P<remote_host>\S+) - (?P<user>\S+) \[(?P<timestamp>[^\]]+)\] "(?P<request_method>\S+) (?P<request_path>\S+) HTTP/(?P<http_version>\S+)" (?P<status_code>\S+) (?P<bytes_sent>\S+)$'
+                    timestamp:
+                      parse_from: timestamp
+                      layout_type: strftime
+                      layout: '%d/%b/%Y:%H:%M:%S %z'
+                  - type: move
+                    from: request_path
+                    to: body  # The main part of the access log (request)
+                resource_attributes:
+                  - key: log_type
+                    value: access_log  # Separate log type for access logs
+              filelog_container:
+                include:
+                  - /var/log/containers/*.log  # Container logs from /var/log/containers/
+                operators:
+                  - type: regex_parser
+                    regex: '^(?P<timestamp>\S+) (?P<severity>\S+) (?P<message>.*)$'
+                    timestamp:
+                      parse_from: timestamp
+                      layout_type: gotime
+                      layout: 2006-01-02T15:04:05.999Z
+                  - type: move
+                    from: message
+                    to: body
+                resource_attributes:
+                  - key: log_type
+                    value: container_log
+
+            processors:
+              batch:
+              memory_limiter:
+                limit_mib: 400
+                spike_limit_mib: 50
+
+            exporters:
+              prometheusremotewrite:
+                endpoint: "http://prometheus-server.default.svc.cluster.local:9090/api/v1/write"
+              elasticsearch:
+                endpoints: ["http://elasticsearch.default.svc.cluster.local:9200"]
+                index: "otel-metrics"
+                trace_index: "otel-traces"
+                username: "elastic"
+                password: "${{ secrets.OBSERVABILITY_PASSWORD }}"
+              jaeger:
+                endpoint: "http://jaeger-collector.default.svc.cluster.local:14250"
+                insecure: true
+
+            service:
+              pipelines:
+                logs:
+                  receivers: [filelog, otlp, filelog_container]
+                  processors: [batch, memory_limiter]
+                  exporters: [elasticsearch]
+                metrics:
+                  receivers: [prometheus, otlp]
+                  processors: [batch, memory_limiter]
+                  exporters: [prometheusremotewrite, elasticsearch]
+                traces:
+                  receivers: [otlp]
+                  processors: [batch, memory_limiter]
+                  exporters: [jaeger, elasticsearch]
+            OTEL_EOF
+
+            helm install otel-collector open-telemetry/opentelemetry-collector -n observability \
+            --values $HOME/kubernetes/otel-collector-config.yaml  # OpenTelemetry config
+
+            # Install Prometheus for metrics storage and scraping
+            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+            helm update
+            helm install prometheus prometheus-community/prometheus -n observability \
+            --set server.persistentVolume.enabled=true \
+            --set server.persistentVolume.size=10Gi \
+            --set server.retention=5d
+
+            tee $HOME/kubernetes/grafana-values.yaml <<GRAF_EOF > /dev/null
+            datasources:
+              datasources.yaml:
+                apiVersion: 1
+                datasources:
+                  - name: Prometheus
+                    type: prometheus
+                    url: http://prometheus-server.default.svc.cluster.local:9090
+                    access: proxy
+
+            dashboards:
+              enabled: true
+              defaultDashboardsEnabled: true
+              dashboardProviders:
+                dashboardproviders.yaml:
+                  apiVersion: 1
+                  providers:
+                    - name: 'default'
+                      folder: 'General'
+                      type: 'file'
+                      options:
+                        path: /var/lib/grafana/dashboards/default
+
+              additionalDataSources:
+                - name: Node Exporter Full
+                  id: 1860
+                - name: Kubernetes cluster monitoring
+                  id: 8588
+            GRAF_EOF
+
+            # Install Grafana for metrics visualization (with secure password)
+            helm repo add grafana https://grafana.github.io/helm-charts
+            helm update
+            helm install grafana grafana/grafana -n observability \
+            --set adminUser=admin \
+            --set adminPassword=${{ secrets.OBSERVABILITY_PASSWORD }} \
+            --values $HOME/kubernetes/grafana-values.yaml  # Grafana config, includes dashboards
+
+            # Install Jaeger for tracing visualization
+            helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
+            helm update
+            helm install jaeger jaegertracing/jaeger -n observability --values $HOME/kubernetes/jaeger-values.yaml
+
+            # Patch Existing Ingress for Grafana, Kibana, and Jaeger (HTTPS on Port 443)
+            - name: Patch Existing Ingress for HTTPS Observability Stack
+              run: |
+                kubectl patch ingress existing-ingress-name -n ingress-nginx --type='json' -p='[
+                {
+                  "op": "add",
+                  "path": "/spec/rules/0/http/paths/0",
+                  "value": {
+                    "path": "/grafana",
+                    "pathType": "Prefix",
+                    "backend": {
+                      "service": {
+                        "name": "grafana",
+                        "port": {
+                          "number": 3000  # Internal Grafana port
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "op": "add",
+                  "path": "/spec/rules/0/http/paths/0",
+                  "value": {
+                    "path": "/kibana",
+                    "pathType": "Prefix",
+                    "backend": {
+                      "service": {
+                        "name": "kibana-kb-http",
+                        "port": {
+                          "number": 5601  # Internal Kibana port
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "op": "add",
+                  "path": "/spec/rules/0/http/paths/0",
+                  "value": {
+                    "path": "/prometheus",
+                    "pathType": "Prefix",
+                    "backend": {
+                      "service": {
+                        "name": "prometheus",
+                        "port": {
+                          "number": 9090  # Internal Prometheus port
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "op": "add",
+                  "path": "/spec/rules/0/http/paths/0",
+                  "value": {
+                    "path": "/jaeger",
+                    "pathType": "Prefix",
+                    "backend": {
+                      "service": {
+                        "name": "jaeger-query",
+                        "port": {
+                          "number": 16686  # Internal Jaeger Query port
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "op": "add",
+                  "path": "/spec/rules/0/http/paths/0",
+                  "value": {
+                    "path": "/elasticsearch",
+                    "pathType": "Prefix",
+                    "backend": {
+                      "service": {
+                        "name": "elasticsearch",
+                        "port": {
+                          "number": 9200  # Internal ElasticSearch HTTP port
+                        }
+                      }
+                    }
+                  }
+                }
+              ]'

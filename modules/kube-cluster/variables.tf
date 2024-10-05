@@ -334,6 +334,18 @@ variable "target_tracking_configuration" {
   }
 }
 
+variable "sns_topic_dereg_name" {
+  description = "The Name of the SNS Topic that will be used for notifications"
+  type        = string
+  default     = "sns-topic-dereg"
+}
+
+variable "lambda_name" {
+  description = "The name of the Deregister Node Lambda"
+  type        = string
+  default     = "deregister-node"
+}
+
 variable "tags" {
   type = map(string)
 }

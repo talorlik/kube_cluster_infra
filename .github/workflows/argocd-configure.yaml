@@ -1,0 +1,200 @@
+name: ArgoCD Install and Configure
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Select AWS Account'
+        required: true
+        type: choice
+        default: '019273956931'
+        options:
+          - '019273956931'
+      region:
+        description: 'Select AWS Region'
+        required: true
+        type: choice
+        default: 'us-east-1: N. Virginia'
+        options:
+          - 'us-east-1: N. Virginia'
+          - 'us-east-2: Ohio'
+      environment:
+        description: 'Select Environment'
+        required: true
+        type: choice
+        default: prod
+        options:
+          - prod
+          - dev
+
+jobs:
+  GetRunId:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.set_run_id.outputs.run_id }}
+    steps:
+      - name: Check and Install curl
+        run: |
+          if ! command -v curl &> /dev/null
+          then
+            echo "curl could not be found. Installing curl..."
+            sudo apt-get update
+            sudo apt-get install -y curl
+          else
+            echo "curl is already installed."
+          fi
+
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Fetch the latest successful workflow run ID from the Infra Deployment
+        id: set_run_id
+        run: |
+          LATEST_SUCCESS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/talorlik/kube_cluster_infra/actions/workflows/infra-provisioning-region.yaml/runs?status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id')
+
+          echo "run_id=$LATEST_SUCCESS" >> $GITHUB_OUTPUT
+
+          echo "The latest successful run ID is $LATEST_SUCCESS"
+
+  SetGlobals:
+    runs-on: ubuntu-latest
+    needs:
+      - GetRunId
+    outputs:
+      region_code: ${{ steps.set_region.outputs.region_code }}
+      bastion_pem_file_name: ${{ steps.set_values.outputs.bastion_pem_file_name }}
+      bastion_public_ip: ${{ steps.set_values.outputs.bastion_public_ip }}
+    steps:
+      - name: Check and Install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Set Region
+        id: set_region
+        run: |
+          SELECTED_REGION="${{ inputs.region }}"
+          echo "region_code=${SELECTED_REGION%%:*}" >> $GITHUB_OUTPUT
+
+      - name: Download Output JSON file
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          github-token: "${{ secrets.GH_TOKEN }}"
+          repository: talorlik/kube_cluster_infra
+          run-id: ${{ needs.GetRunId.outputs.run_id }}
+
+      - name: Extract outputs from file and set as environment variables
+        id: set_values
+        env:
+          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+        run: |
+          echo "bastion_pem_file_name=$(jq -r '.bastion_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+          echo "bastion_public_ip=$(jq -r '.bastion_public_ip.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+  Configure:
+    runs-on: ubuntu-latest
+    needs:
+      - GetRunId
+      - SetGlobals
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ needs.SetGlobals.outputs.region_code }}
+      LOCAL_PATH: /home/runner/.ssh
+      BASTION_PEM_FILE_NAME: ${{ needs.SetGlobals.outputs.bastion_pem_file_name }}
+      BASTION_PUBLIC_IP: ${{ needs.SetGlobals.outputs.bastion_public_ip }}
+    steps:
+      - name: Download Bastion SSH key
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ env.BASTION_PEM_FILE_NAME }}"
+          github-token: "${{ secrets.GH_TOKEN }}"
+          repository: talorlik/kube_cluster_infra
+          run-id: ${{ needs.GetRunId.outputs.run_id }}
+          path: "${{ env.LOCAL_PATH }}"
+
+      - name: Set permissions for SSH key and directory
+        run: |
+          chmod 400 ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
+          chmod 700 ${{ env.LOCAL_PATH }}
+
+      - name: SSH to Bastion and deploy ArgoCD
+        uses: appleboy/ssh-action@v0.1.4
+        with:
+          host: ${{ env.BASTION_PUBLIC_IP }}
+          username: ubuntu
+          key: ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
+          port: 22
+          script: |
+            # Set up ArgoCD CLI and Install ArgoCD
+            VERSION=$(curl -L -s https://raw.githubusercontent.com/argoproj/argo-cd/stable/VERSION)
+            curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/download/v$VERSION/argocd-linux-amd64
+            sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+            rm argocd-linux-amd64
+
+            kubectl create namespace argocd
+            kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+            # Patch existing ingress to include ArgoCD path
+            kubectl patch ingress alb-ingress-connect-nginx -n ingress-nginx \
+              -n argocd \
+              --type='json' \
+              -p='[
+                {
+                  "op": "add",
+                  "path": "/spec/rules/0/http/paths/-",
+                  "value": {
+                    "path": "/argo-cd(/|$)(.*)",
+                    "pathType": "ImplementationSpecific",
+                    "backend": {
+                      "service": {
+                        "name": "argocd-server",
+                        "port": {
+                          "number": 443
+                        }
+                      }
+                    }
+                  }
+                }
+              ]'
+
+            # Set up ArgoCD applications (polybot and yolo5)
+            argocdPassword=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 --decode)
+            curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/v$VERSION/argocd-linux-amd64
+            chmod +x /usr/local/bin/argocd
+
+            argocd login --insecure --username admin --password $argocdPassword --grpc-web $(kubectl get svc argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+            argocd app create polybot \
+              --repo https://github.com/talorlik/polybot_service.git \
+              --path app \
+              --dest-server https://kubernetes.default.svc \
+              --dest-namespace polybot
+
+            argocd app create yolo5 \
+              --repo https://github.com/talorlik/yolo5_service.git \
+              --path app \
+              --dest-server https://kubernetes.default.svc \
+              --dest-namespace yolo5
+
+            argocd app sync polybot
+            argocd app sync yolo5

@@ -173,188 +173,188 @@ jobs:
           chmod 400 ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
           chmod 700 ${{ env.LOCAL_PATH }}
 
-      - name: SSH to Control Plane and deploy resources
-        run: |
-          ssh -C \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -o ServerAliveInterval=60 \
-            -o ServerAliveCountMax=10 \
-            -i ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }} ubuntu@${{ env.BASTION_PUBLIC_IP }} << 'EOF'
-          kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+      - name: SSH into Bastion and deploy resources
+        uses: appleboy/ssh-action@v0.1.4
+        with:
+          host: ${{ env.BASTION_PUBLIC_IP }}
+          username: ubuntu
+          key: ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
+          port: 22
+          script: |
+            kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 
-          sleep 60
-
-          kubectl apply -k 'github.com/kubernetes/cloud-provider-aws/examples/existing-cluster/base/?ref=master'
-
-          sleep 60
-
-          helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-          helm repo update
-
-          tee $HOME/kubernetes/ebs-csi-values.yaml <<EBS_EOF > /dev/null
-          storageClasses:
-            - name: ebs-sc
-              annotations:
-                storageclass.kubernetes.io/is-default-class: "true"
-              provisioner: ebs.csi.aws.com
-              volumeBindingMode: WaitForFirstConsumer
-              parameters:
-                csi.storage.k8s.io/fstype: xfs
-                type: gp3
-                encrypted: "true"
-          EBS_EOF
-
-          helm upgrade --install aws-ebs-csi-driver -f $HOME/kubernetes/ebs-csi-values.yaml -n kube-system aws-ebs-csi-driver/aws-ebs-csi-driver
-
-          sleep 60
-
-          # Install Kubernetes Dashboard
-          helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
-          helm repo update
-          helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
-
-          tee $HOME/kubernetes/k8s-dashboard-user.yaml <<DASH_EOF > /dev/null
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: admin-user
-            namespace: kubernetes-dashboard
-          ---
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: ClusterRoleBinding
-          metadata:
-            name: admin-user
-          roleRef:
-            apiGroup: rbac.authorization.k8s.io
-            kind: ClusterRole
-            name: cluster-admin
-          subjects:
-          - kind: ServiceAccount
-            name: admin-user
-            namespace: kubernetes-dashboard
-          ---
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: admin-user
-            namespace: kubernetes-dashboard
-            annotations:
-              kubernetes.io/service-account.name: "admin-user"
-          type: kubernetes.io/service-account-token
-          DASH_EOF
-
-          kubectl apply -f $HOME/kubernetes/k8s-dashboard-user.yaml
-
-          DASHBOARD_TOKEN=$(kubectl get secret admin-user -n kubernetes-dashboard -o jsonpath={".data.token"} | base64 -d)
-
-          # Store the dashboard token as a separate secret in AWS Secrets Manager
-          aws secretsmanager create-secret --name ${{ env.KUBE_DASHBOARD_TOKEN_SECRET_NAME }} --secret-string "$DASHBOARD_TOKEN" --region ${{ env.AWS_REGION }} --tags ${{ env.KUBE_DASHBOARD_TOKEN_SECRET_TAGS }}
-
-          sleep 60
-
-          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-          helm repo update
-
-          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-          --namespace ingress-nginx \
-          --create-namespace \
-          --set controller.service.type=NodePort \
-          --set controller.service.nodePorts.https=30443
-
-          kubectl create secret tls tls-secret \
-          --namespace ingress-nginx \
-          --cert=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_BODY_SECRET_NAME }}" --query SecretString --output text) \
-          --key=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_KEY_SECRET_NAME }}" --query SecretString --output text)
-
-          tee $HOME/kubernetes/alb-ingress-connect-nginx.yaml <<ING_EOF > /dev/null
-          apiVersion: networking.k8s.io/v1
-          kind: Ingress
-          metadata:
-            name: alb-ingress-connect-nginx
-            namespace: ingress-nginx
-            annotations:
-              # Ingress Core Settings
-              kubernetes.io/ingress.class: 'alb'
-              alb.ingress.kubernetes.io/scheme: 'internet-facing'
-              kubernetes.io/service-name: 'ingress-nginx/ingress-nginx-controller'
-
-              # Health Check Settings
-              alb.ingress.kubernetes.io/healthcheck-protocol: 'HTTPS'
-              alb.ingress.kubernetes.io/healthcheck-port: '8443'
-              alb.ingress.kubernetes.io/healthcheck-path: '/health'
-              alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
-              alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
-              alb.ingress.kubernetes.io/success-codes: '200-399,404'
-              alb.ingress.kubernetes.io/healthy-threshold-count: '5'
-              alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
-
-              # SSL Settings
-              alb.ingress.kubernetes.io/listen-ports: '[{\"HTTPS\":\"443\"}, {\"HTTPS\":\"8443\"}]'
-              alb.ingress.kubernetes.io/certificate-arn: '${{ env.CERTIFICATE_ARN }}'
-              nginx.ingress.kubernetes.io/backend-protocol: 'HTTPS'
-              nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-
-              alb.ingress.kubernetes.io/security-groups: '${{ env.ALB_SG_ID }}'
-              alb.ingress.kubernetes.io/load-balancer-name: '${{ env.ALB_NAME }}'
-              alb.ingress.kubernetes.io/tags: '${{ env.ALB_TAGS }}'
-          spec:
-            rules:
-            - host: "${{ env.SUB_DOMAIN_NAME }}"
-              http:
-                paths:
-                - path: /dashboard/*
-                  pathType: Prefix
-                  backend:
-                    service:
-                      name: kubernetes-dashboard-kong-proxy
-                      port:
-                        number: 443
-                - path: /*
-                  pathType: Prefix
-                  backend:
-                    service:
-                      name: polybot-service
-                      port:
-                        number: 8443
-            tls:
-            - hosts:
-              - "${{ env.SUB_DOMAIN_NAME }}"
-              secretName: tls-secret
-            ingressClassName: alb
-          ING_EOF
-
-          kubectl apply -f $HOME/kubernetes/alb-ingress-connect-nginx.yaml
-
-          retries=0
-          max_retries=10
-          while [[ $(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].State.Code' --output text) != "active" ]]; do
-            if [[ $retries -ge $max_retries ]]; then
-              echo "Maximum retries reached. ALB is still not active."
-              exit 1
-            fi
-            echo "Waiting for ALB to become active... Retry #$((retries + 1))"
-            ((retries++))
             sleep 60
-          done
 
-          alb_dns_name=$(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].DNSName' --output text)
-          alb_zone_id=$(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].CanonicalHostedZoneId' --output text)
+            kubectl apply -k 'github.com/kubernetes/cloud-provider-aws/examples/existing-cluster/base/?ref=master'
 
-          route53_zone_info=$(aws route53 list-hosted-zones-by-name --dns-name "int-devops.click." --query 'HostedZones[0].Id' --output text)
+            sleep 60
 
-          aws route53 change-resource-record-sets --hosted-zone-id "$route53_zone_info" --change-batch '{
-            "Changes": [{
-              "Action": "UPSERT",
-              "ResourceRecordSet": {
-                "Name": "${{ env.SUB_DOMAIN_NAME }}",
-                "Type": "A",
-                "AliasTarget": {
-                  "DNSName": "$alb_dns_name",
-                  "HostedZoneId": "$alb_zone_id",
-                  "EvaluateTargetHealth": false
+            helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+            helm repo update
+
+            tee $HOME/kubernetes/ebs-csi-values.yaml <<EBS_EOF > /dev/null
+            storageClasses:
+              - name: ebs-sc
+                annotations:
+                  storageclass.kubernetes.io/is-default-class: "true"
+                provisioner: ebs.csi.aws.com
+                volumeBindingMode: WaitForFirstConsumer
+                parameters:
+                  csi.storage.k8s.io/fstype: xfs
+                  type: gp3
+                  encrypted: "true"
+            EBS_EOF
+
+            helm upgrade --install aws-ebs-csi-driver -f $HOME/kubernetes/ebs-csi-values.yaml -n kube-system aws-ebs-csi-driver/aws-ebs-csi-driver
+
+            sleep 60
+
+            # Install Kubernetes Dashboard
+            helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+            helm repo update
+            helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+
+            tee $HOME/kubernetes/k8s-dashboard-user.yaml <<DASH_EOF > /dev/null
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: admin-user
+              namespace: kubernetes-dashboard
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: admin-user
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: ClusterRole
+              name: cluster-admin
+            subjects:
+            - kind: ServiceAccount
+              name: admin-user
+              namespace: kubernetes-dashboard
+            ---
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: admin-user
+              namespace: kubernetes-dashboard
+              annotations:
+                kubernetes.io/service-account.name: "admin-user"
+            type: kubernetes.io/service-account-token
+            DASH_EOF
+
+            kubectl apply -f $HOME/kubernetes/k8s-dashboard-user.yaml
+
+            DASHBOARD_TOKEN=$(kubectl get secret admin-user -n kubernetes-dashboard -o jsonpath={".data.token"} | base64 -d)
+
+            # Store the dashboard token as a separate secret in AWS Secrets Manager
+            aws secretsmanager create-secret --name ${{ env.KUBE_DASHBOARD_TOKEN_SECRET_NAME }} --secret-string "$DASHBOARD_TOKEN" --region ${{ env.AWS_REGION }} --tags ${{ env.KUBE_DASHBOARD_TOKEN_SECRET_TAGS }}
+
+            sleep 60
+
+            helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+            helm repo update
+
+            helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx \
+            --create-namespace \
+            --set controller.service.type=NodePort \
+            --set controller.service.nodePorts.https=30443
+
+            kubectl create secret tls tls-secret \
+            --namespace ingress-nginx \
+            --cert=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_BODY_SECRET_NAME }}" --query SecretString --output text) \
+            --key=<(aws secretsmanager get-secret-value --secret-id "${{ env.CERTIFICATE_KEY_SECRET_NAME }}" --query SecretString --output text)
+
+            tee $HOME/kubernetes/alb-ingress-connect-nginx.yaml <<ING_EOF > /dev/null
+            apiVersion: networking.k8s.io/v1
+            kind: Ingress
+            metadata:
+              name: alb-ingress-connect-nginx
+              namespace: ingress-nginx
+              annotations:
+                # Ingress Core Settings
+                kubernetes.io/ingress.class: 'alb'
+                alb.ingress.kubernetes.io/scheme: 'internet-facing'
+                kubernetes.io/service-name: 'ingress-nginx/ingress-nginx-controller'
+
+                # Health Check Settings
+                alb.ingress.kubernetes.io/healthcheck-protocol: 'HTTPS'
+                alb.ingress.kubernetes.io/healthcheck-port: '8443'
+                alb.ingress.kubernetes.io/healthcheck-path: '/health'
+                alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+                alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+                alb.ingress.kubernetes.io/success-codes: '200-399,404'
+                alb.ingress.kubernetes.io/healthy-threshold-count: '5'
+                alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+
+                # SSL Settings
+                alb.ingress.kubernetes.io/listen-ports: '[{\"HTTPS\":\"443\"}, {\"HTTPS\":\"8443\"}]'
+                alb.ingress.kubernetes.io/certificate-arn: '${{ env.CERTIFICATE_ARN }}'
+                nginx.ingress.kubernetes.io/backend-protocol: 'HTTPS'
+                nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+                nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+
+                alb.ingress.kubernetes.io/security-groups: '${{ env.ALB_SG_ID }}'
+                alb.ingress.kubernetes.io/load-balancer-name: '${{ env.ALB_NAME }}'
+                alb.ingress.kubernetes.io/tags: '${{ env.ALB_TAGS }}'
+            spec:
+              rules:
+              - host: "${{ env.SUB_DOMAIN_NAME }}"
+                http:
+                  paths:
+                  - path: /dashboard/*
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: kubernetes-dashboard-kong-proxy
+                        port:
+                          number: 443
+                  - path: /*
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: polybot-service
+                        port:
+                          number: 8443
+              tls:
+              - hosts:
+                - "${{ env.SUB_DOMAIN_NAME }}"
+                secretName: tls-secret
+              ingressClassName: alb
+            ING_EOF
+
+            kubectl apply -f $HOME/kubernetes/alb-ingress-connect-nginx.yaml
+
+            retries=0
+            max_retries=10
+            while [[ $(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].State.Code' --output text) != "active" ]]; do
+              if [[ $retries -ge $max_retries ]]; then
+                echo "Maximum retries reached. ALB is still not active."
+                exit 1
+              fi
+              echo "Waiting for ALB to become active... Retry #$((retries + 1))"
+              ((retries++))
+              sleep 60
+            done
+
+            alb_dns_name=$(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].DNSName' --output text)
+            alb_zone_id=$(aws elbv2 describe-load-balancers --names "${{ env.ALB_NAME }}" --query 'LoadBalancers[0].CanonicalHostedZoneId' --output text)
+
+            route53_zone_info=$(aws route53 list-hosted-zones-by-name --dns-name "int-devops.click." --query 'HostedZones[0].Id' --output text)
+
+            aws route53 change-resource-record-sets --hosted-zone-id "$route53_zone_info" --change-batch '{
+              "Changes": [{
+                "Action": "UPSERT",
+                "ResourceRecordSet": {
+                  "Name": "${{ env.SUB_DOMAIN_NAME }}",
+                  "Type": "A",
+                  "AliasTarget": {
+                    "DNSName": "$alb_dns_name",
+                    "HostedZoneId": "$alb_zone_id",
+                    "EvaluateTargetHealth": false
+                  }
                 }
-              }
-            }]
-          }'
-          EOF
+              }]
+            }'
