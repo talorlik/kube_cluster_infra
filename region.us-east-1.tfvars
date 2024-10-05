@@ -143,16 +143,16 @@ alb_sg_ingress_rules = [
 ### Kubernetes Cluster ###
 k8s_version      = "v1.31"
 cluster_name     = "kube-cluster"
-cp_instance_type = "t3.large"
-wn_instance_type = "t3.large"
+cp_instance_type = "t3.medium"
+wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v7d"
-sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v7d"
-join_secret_name                 = "kubeadm/join-details/v7d"
-kube_config_secret_name          = "kube/config/v7d"
-kube_dashboard_token_secret_name = "kube/dashboard-token/v7d"
+sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v8"
+sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v8"
+join_secret_name                 = "kubeadm/join-details/v8"
+kube_config_secret_name          = "kube/config/v8"
+kube_dashboard_token_secret_name = "kube/dashboard-token/v8"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"
