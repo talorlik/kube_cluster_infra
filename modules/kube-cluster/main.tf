@@ -262,7 +262,7 @@ resource "aws_sns_topic_policy" "sns_topic_dereg_policy" {
       {
         Effect    = "Allow",
         Principal = "*",
-        Action    = "SNS:Publish",
+        Action    = "sns:Publish",
         Resource  = aws_sns_topic.sns_topic_dereg.arn,
         Condition = {
           ArnEquals = {
