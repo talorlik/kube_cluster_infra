@@ -132,18 +132,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Replace KubeConfig Secret Placeholder with Actual Secret Name
-        run: |
-          sed -i "s/REPLACE_WITH_KUBE_CONF_SECRET_NAME/${{ needs.SetGlobals.outputs.kube_config_secret_name }}/g" ${{ github.workspace }}/modules/kube-cluster/lambda/lambda_function.py
-
       - name: Zip Lambda Function
         run: |
           cd ${{ github.workspace }}/modules/kube-cluster/lambda
-          zip ${{ github.workspace }}/function.zip lambda_function.py
+          zip lambda.zip lambda_function.py
 
       - name: Update Lambda Function Code
         run: |
           aws lambda update-function-code \
             --function-name ${{ needs.SetGlobals.outputs.lambda_name }} \
-            --zip-file fileb://${{ github.workspace }}/function.zip \
+            --zip-file fileb://${{ github.workspace }}/lambda.zip \
             --region ${{ needs.SetGlobals.outputs.region_code }}

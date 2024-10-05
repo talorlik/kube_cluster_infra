@@ -331,6 +331,14 @@ resource "aws_lambda_function" "deregister_node_lambda" {
   role          = aws_iam_role.lambda_role.arn
   runtime       = "python3.12"
   handler       = "lambda_function.lambda_handler"
+  source_code_hash = filebase64sha256("lambda.zip")
+  filename         = "lambda.zip"
+
+  environment {
+    variables = {
+      KUBE_CONF_SECRET_NAME = local.kube_config_secret_name
+    }
+  }
 }
 
 resource "aws_lambda_permission" "allow_sns" {

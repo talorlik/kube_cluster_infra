@@ -7,6 +7,8 @@ import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+KUBE_CONF_SECRET_NAME = os.environ('KUBE_CONF_SECRET_NAME')
+
 def get_private_dns_name(instance_id):
     ec2_client = boto3.client('ec2')
     response = ec2_client.describe_instances(InstanceIds=[instance_id])
@@ -15,7 +17,7 @@ def get_private_dns_name(instance_id):
 
 def get_kubeconfig():
     client = boto3.client('secretsmanager')
-    secret_value = client.get_secret_value(SecretId='REPLACE_WITH_KUBE_CONF_SECRET_NAME')
+    secret_value = client.get_secret_value(SecretId=KUBE_CONF_SECRET_NAME)
     kubeconfig = secret_value['SecretString']
     # Save the kubeconfig to a temporary file for use with kubectl
     with open('/tmp/kubeconfig', 'w') as f:
