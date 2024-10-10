@@ -283,7 +283,7 @@ variable "sns_endpoint" {
 variable "autoscaling_policy_name" {
   description = "The Name of the Autoscaling Policy"
   type        = string
-  default     = "avg-cpu-policy"
+  default     = "autoscaling-policy"
 }
 
 variable "notifications" {

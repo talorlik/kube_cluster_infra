@@ -224,7 +224,7 @@ resource "aws_autoscaling_notification" "notifications" {
 ############# Target Tracking Scaling Policies ###########
 # TTS - Scaling Policy-1: Based on CPU Utilization
 resource "aws_autoscaling_policy" "avg_cpu_policy" {
-  name = local.autoscaling_policy_name
+  name = "${local.autoscaling_policy_name}-cpu"
   # The policy type may be either "SimpleScaling", "StepScaling" or "TargetTrackingScaling". If this value isn't provided, AWS will default to "SimpleScaling."
   policy_type            = var.policy_type
   autoscaling_group_name = aws_autoscaling_group.asg.name
@@ -238,6 +238,28 @@ resource "aws_autoscaling_policy" "avg_cpu_policy" {
     }
     target_value     = var.target_tracking_configuration.target_value
     disable_scale_in = var.target_tracking_configuration.disable_scale_in
+  }
+}
+
+# TTS - Scaling Policy-2: Based on RAM Utilization (Custom Metric)
+resource "aws_autoscaling_policy" "avg_ram_policy" {
+  name = "${local.autoscaling_policy_name}-ram"
+  policy_type            = var.policy_type
+  autoscaling_group_name = aws_autoscaling_group.asg.name
+  target_tracking_configuration {
+    customized_metric_specification {
+      metric_name = "MemoryUtilization" # Custom metric name for RAM
+      namespace   = "CWAgent"           # Namespace defined by the CloudWatch Agent
+      statistic   = "Average"           # Use the average RAM utilization across instances
+      unit        = "Percent"           # RAM utilization as a percentage
+
+      metric_dimension {
+        name  = "AutoScalingGroupName"
+        value = aws_autoscaling_group.asg.name
+      }
+    }
+    target_value     = 70.0  # Scale when RAM utilization is above 70%
+    disable_scale_in = false
   }
 }
 
@@ -378,12 +400,11 @@ resource "aws_iam_role_policy" "iam_policy_for_hook" {
         Effect = "Allow",
         Action = [
           "sns:Publish",                        # Permission to publish to SNS
-          "lambda:InvokeFunction",              # (Optional) If invoking Lambda directly
           "autoscaling:CompleteLifecycleAction" # Required to complete the lifecycle action
         ],
         Resource = [
-          aws_sns_topic.sns_topic_dereg.arn,             # ARN of the SNS topic
-          aws_lambda_function.deregister_node_lambda.arn # (Optional) ARN of Lambda function
+          aws_sns_topic.sns_topic_dereg.arn,
+          aws_sns_topic.sns_topic.arn
         ]
       }
     ]

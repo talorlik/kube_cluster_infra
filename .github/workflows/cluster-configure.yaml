@@ -155,6 +155,7 @@ jobs:
       ALB_SG_ID: ${{ needs.SetGlobals.outputs.alb_sg_id }}
       ALB_NAME: "${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }}"
       ALB_TAGS: "\"Name=${{ needs.SetGlobals.outputs.prefix }}-${{ needs.SetGlobals.outputs.region_code }}-alb-${{ inputs.environment }}\",\"Env=${{ inputs.environment }}\",\"Terraform=true\",\"kubernetes.io/cluster/${{ needs.SetGlobals.outputs.cluster_name }}=owned\""
+      CLUSTER_NAME: ${{ needs.SetGlobals.outputs.cluster_name }}
       BASTION_PUBLIC_IP: ${{ needs.SetGlobals.outputs.bastion_public_ip }}
       KUBE_DASHBOARD_TOKEN_SECRET_NAME: ${{ needs.SetGlobals.outputs.kube_dashboard_token_secret_name }}
       KUBE_DASHBOARD_TOKEN_SECRET_TAGS: ${{ needs.SetGlobals.outputs.kube_dashboard_token_secret_tags }}
@@ -358,3 +359,7 @@ jobs:
                 }
               }]
             }'
+
+            helm repo add cluster-autoscaler https://kubernetes.github.io/autoscaler
+            helm update
+            helm install kube-cluster-autoscaler cluster-autoscaler/cluster-autoscaler --version 9.43.0 --set autoDiscovery.clusterName=${{ env.CLUSTER_NAME }} --set awsRegion=${{ env.AWS_REGION }}
