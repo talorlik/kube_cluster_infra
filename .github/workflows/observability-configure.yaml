@@ -139,7 +139,7 @@ jobs:
           chmod 400 ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
           chmod 700 ${{ env.LOCAL_PATH }}
 
-      - name: SSH to Bastion and deploy ArgoCD
+      - name: Deploy observability stack
         uses: appleboy/ssh-action@v0.1.4
         with:
           host: ${{ env.BASTION_PUBLIC_IP }}
@@ -370,6 +370,23 @@ jobs:
                 resource_attributes:
                   - key: log_type
                     value: container_log
+              filelog_termination:
+                include:
+                  - /var/log/polybot-termination.log
+                  - /var/log/yolo5-termination.log
+                operators:
+                  - type: regex_parser
+                    regex: '^(?P<timestamp>\S+) (?P<severity>\S+) (?P<message>.*)$'
+                    timestamp:
+                      parse_from: timestamp
+                      layout_type: gotime
+                      layout: "Jan 02 15:04:05"
+                  - type: move
+                    from: message
+                    to: body
+                resource_attributes:
+                  - key: log_type
+                    value: termination_log
 
             processors:
               batch:
@@ -393,7 +410,7 @@ jobs:
             service:
               pipelines:
                 logs:
-                  receivers: [filelog, otlp, filelog_container]
+                  receivers: [filelog_system, filelog_access, filelog_container, filelog_termination, otlp]
                   processors: [batch, memory_limiter]
                   exporters: [elasticsearch]
                 metrics:
@@ -463,85 +480,87 @@ jobs:
             # Patch Existing Ingress for Grafana, Kibana, and Jaeger (HTTPS on Port 443)
             - name: Patch Existing Ingress for HTTPS Observability Stack
               run: |
-                kubectl patch ingress existing-ingress-name -n ingress-nginx --type='json' -p='[
-                {
-                  "op": "add",
-                  "path": "/spec/rules/0/http/paths/0",
-                  "value": {
-                    "path": "/grafana",
-                    "pathType": "Prefix",
-                    "backend": {
-                      "service": {
-                        "name": "grafana",
-                        "port": {
-                          "number": 3000  # Internal Grafana port
+                kubectl patch ingress existing-ingress-name -n ingress-nginx \
+                --type='json' \
+                -p='[
+                  {
+                    "op": "add",
+                    "path": "/spec/rules/0/http/paths/0",
+                    "value": {
+                      "path": "/grafana",
+                      "pathType": "Prefix",
+                      "backend": {
+                        "service": {
+                          "name": "grafana",
+                          "port": {
+                            "number": 3000  # Internal Grafana port
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "op": "add",
+                    "path": "/spec/rules/0/http/paths/0",
+                    "value": {
+                      "path": "/kibana",
+                      "pathType": "Prefix",
+                      "backend": {
+                        "service": {
+                          "name": "kibana-kb-http",
+                          "port": {
+                            "number": 5601  # Internal Kibana port
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "op": "add",
+                    "path": "/spec/rules/0/http/paths/0",
+                    "value": {
+                      "path": "/prometheus",
+                      "pathType": "Prefix",
+                      "backend": {
+                        "service": {
+                          "name": "prometheus",
+                          "port": {
+                            "number": 9090  # Internal Prometheus port
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "op": "add",
+                    "path": "/spec/rules/0/http/paths/0",
+                    "value": {
+                      "path": "/jaeger",
+                      "pathType": "Prefix",
+                      "backend": {
+                        "service": {
+                          "name": "jaeger-query",
+                          "port": {
+                            "number": 16686  # Internal Jaeger Query port
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "op": "add",
+                    "path": "/spec/rules/0/http/paths/0",
+                    "value": {
+                      "path": "/elasticsearch",
+                      "pathType": "Prefix",
+                      "backend": {
+                        "service": {
+                          "name": "elasticsearch",
+                          "port": {
+                            "number": 9200  # Internal ElasticSearch HTTP port
+                          }
                         }
                       }
                     }
                   }
-                },
-                {
-                  "op": "add",
-                  "path": "/spec/rules/0/http/paths/0",
-                  "value": {
-                    "path": "/kibana",
-                    "pathType": "Prefix",
-                    "backend": {
-                      "service": {
-                        "name": "kibana-kb-http",
-                        "port": {
-                          "number": 5601  # Internal Kibana port
-                        }
-                      }
-                    }
-                  }
-                },
-                {
-                  "op": "add",
-                  "path": "/spec/rules/0/http/paths/0",
-                  "value": {
-                    "path": "/prometheus",
-                    "pathType": "Prefix",
-                    "backend": {
-                      "service": {
-                        "name": "prometheus",
-                        "port": {
-                          "number": 9090  # Internal Prometheus port
-                        }
-                      }
-                    }
-                  }
-                },
-                {
-                  "op": "add",
-                  "path": "/spec/rules/0/http/paths/0",
-                  "value": {
-                    "path": "/jaeger",
-                    "pathType": "Prefix",
-                    "backend": {
-                      "service": {
-                        "name": "jaeger-query",
-                        "port": {
-                          "number": 16686  # Internal Jaeger Query port
-                        }
-                      }
-                    }
-                  }
-                },
-                {
-                  "op": "add",
-                  "path": "/spec/rules/0/http/paths/0",
-                  "value": {
-                    "path": "/elasticsearch",
-                    "pathType": "Prefix",
-                    "backend": {
-                      "service": {
-                        "name": "elasticsearch",
-                        "port": {
-                          "number": 9200  # Internal ElasticSearch HTTP port
-                        }
-                      }
-                    }
-                  }
-                }
-              ]'
+                ]'

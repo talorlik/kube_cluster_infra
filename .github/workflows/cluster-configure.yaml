@@ -116,25 +116,15 @@ jobs:
           ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
         run: |
           echo "bastion_pem_file_name=$(jq -r '.bastion_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "certificate_arn=$(jq -r '.certificate_arn.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "common_name=$(jq -r '.common_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "sub_domain_cert_body_secret_name=$(jq -r '.sub_domain_cert_body_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "sub_domain_cert_key_secret_name=$(jq -r '.sub_domain_cert_key_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "alb_sg_id=$(jq -r '.alb_sg_id.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "prefix=$(jq -r '.prefix.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "cluster_name=$(jq -r '.cluster_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "bastion_public_ip=$(jq -r '.bastion_public_ip.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "kube_dashboard_token_secret_name=$(jq -r '.kube_dashboard_token_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "kube_dashboard_token_secret_tags=$(jq -r '.kube_dashboard_token_secret_tags.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
 
   Configure:
@@ -363,3 +353,9 @@ jobs:
             helm repo add cluster-autoscaler https://kubernetes.github.io/autoscaler
             helm update
             helm install kube-cluster-autoscaler cluster-autoscaler/cluster-autoscaler --version 9.43.0 --set autoDiscovery.clusterName=${{ env.CLUSTER_NAME }} --set awsRegion=${{ env.AWS_REGION }}
+
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            kubectl create secret docker-registry ecr-creds-secret \
+            --docker-server=${{ inputs.account }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
+            --docker-username=AWS \
+            --docker-password-stdin

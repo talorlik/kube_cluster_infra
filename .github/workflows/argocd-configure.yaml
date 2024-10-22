@@ -137,7 +137,7 @@ jobs:
           chmod 400 ${{ env.LOCAL_PATH }}/${{ env.BASTION_PEM_FILE_NAME }}
           chmod 700 ${{ env.LOCAL_PATH }}
 
-      - name: SSH to Bastion and deploy ArgoCD
+      - name: Deploy ArgoCD
         uses: appleboy/ssh-action@v0.1.4
         with:
           host: ${{ env.BASTION_PUBLIC_IP }}
@@ -156,7 +156,6 @@ jobs:
 
             # Patch existing ingress to include ArgoCD path
             kubectl patch ingress alb-ingress-connect-nginx -n ingress-nginx \
-              -n argocd \
               --type='json' \
               -p='[
                 {
@@ -188,13 +187,17 @@ jobs:
               --repo https://github.com/talorlik/polybot_service.git \
               --path app \
               --dest-server https://kubernetes.default.svc \
-              --dest-namespace polybot
+              --dest-namespace polybot \
+              --helm-set namespace=polybot \
+              --helm-set environment=${{ inputs.environment }}
 
             argocd app create yolo5 \
               --repo https://github.com/talorlik/yolo5_service.git \
               --path app \
               --dest-server https://kubernetes.default.svc \
-              --dest-namespace yolo5
+              --dest-namespace yolo5 \
+              --helm-set namespace=yolo5 \
+              --helm-set environment=${{ inputs.environment }}
 
             argocd app sync polybot
             argocd app sync yolo5
