@@ -1,3 +1,8 @@
+output "aws_account" {
+  description = "The AWS Account ID"
+  value       = var.aws_account
+}
+
 output "region" {
   description = "The AWS region"
   value       = var.region

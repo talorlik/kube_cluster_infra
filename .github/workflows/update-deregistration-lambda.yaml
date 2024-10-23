@@ -3,13 +3,6 @@ name: Kubernetes Cluster WD Deregistration Lambda Update
 on:
   workflow_dispatch:
     inputs:
-      account:
-        description: 'Select AWS Account'
-        required: true
-        type: choice
-        default: '019273956931'
-        options:
-          - '019273956931'
       region:
         description: 'Select AWS Region'
         required: true

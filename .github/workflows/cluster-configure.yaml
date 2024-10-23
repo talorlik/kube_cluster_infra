@@ -3,13 +3,6 @@ name: Kubernetes Cluster Configuration
 on:
   workflow_dispatch:
     inputs:
-      account:
-        description: 'Select AWS Account'
-        required: true
-        type: choice
-        default: '019273956931'
-        options:
-          - '019273956931'
       region:
         description: 'Select AWS Region'
         required: true
@@ -73,6 +66,7 @@ jobs:
       - GetRunId
     outputs:
       region_code: ${{ steps.set_region.outputs.region_code }}
+      aws_account: ${{ steps.set_values.outputs.aws_account }}
       bastion_pem_file_name: ${{ steps.set_values.outputs.bastion_pem_file_name }}
       certificate_arn: ${{ steps.set_values.outputs.certificate_arn }}
       common_name: ${{ steps.set_values.outputs.common_name }}
@@ -115,6 +109,7 @@ jobs:
         env:
           ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
         run: |
+          echo "aws_account=$(jq -r '.aws_account.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
           echo "bastion_pem_file_name=$(jq -r '.bastion_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
           echo "certificate_arn=$(jq -r '.certificate_arn.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
           echo "common_name=$(jq -r '.common_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
@@ -137,6 +132,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ needs.SetGlobals.outputs.region_code }}
       LOCAL_PATH: /home/runner/.ssh
+      AWS_ACCOUNT: ${{ needs.SetGlobals.outputs.aws_account }}
       BASTION_PEM_FILE_NAME: ${{ needs.SetGlobals.outputs.bastion_pem_file_name }}
       CERTIFICATE_ARN: ${{ needs.SetGlobals.outputs.certificate_arn }}
       CERTIFICATE_BODY_SECRET_NAME: ${{ needs.SetGlobals.outputs.sub_domain_cert_body_secret_name }}
@@ -356,6 +352,6 @@ jobs:
 
             aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
             kubectl create secret docker-registry ecr-creds-secret \
-            --docker-server=${{ inputs.account }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
+            --docker-server=${{ env.AWS_ACCOUNT }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
             --docker-username=AWS \
             --docker-password-stdin

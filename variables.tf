@@ -1,3 +1,8 @@
+variable "aws_account" {
+  description = "The AWS Account ID"
+  type        = string
+}
+
 variable "env" {
   description = "Deployment environment"
   type        = string
@@ -6,16 +11,10 @@ variable "env" {
 variable "region" {
   description = "Deployment region"
   type        = string
-  default     = "us-east-1"
 }
 
 variable "prefix" {
   description = "Name added to all resources"
-  type        = string
-}
-
-variable "resource_alias" {
-  description = "My name"
   type        = string
 }
 

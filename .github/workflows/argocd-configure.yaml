@@ -3,13 +3,6 @@ name: ArgoCD Install and Configure
 on:
   workflow_dispatch:
     inputs:
-      account:
-        description: 'Select AWS Account'
-        required: true
-        type: choice
-        default: '019273956931'
-        options:
-          - '019273956931'
       region:
         description: 'Select AWS Region'
         required: true
@@ -178,14 +171,12 @@ jobs:
 
             # Set up ArgoCD applications (polybot and yolo5)
             argocdPassword=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 --decode)
-            curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/v$VERSION/argocd-linux-amd64
-            chmod +x /usr/local/bin/argocd
 
             argocd login --insecure --username admin --password $argocdPassword --grpc-web $(kubectl get svc argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
             argocd app create polybot \
               --repo https://github.com/talorlik/polybot_service.git \
-              --path app \
+              --path helm/polybot \
               --dest-server https://kubernetes.default.svc \
               --dest-namespace polybot \
               --helm-set namespace=polybot \
@@ -193,7 +184,7 @@ jobs:
 
             argocd app create yolo5 \
               --repo https://github.com/talorlik/yolo5_service.git \
-              --path app \
+              --path helm/yolo5 \
               --dest-server https://kubernetes.default.svc \
               --dest-namespace yolo5 \
               --helm-set namespace=yolo5 \

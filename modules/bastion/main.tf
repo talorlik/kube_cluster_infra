@@ -2,7 +2,7 @@ locals {
   iam_role_name               = "${var.prefix}-${var.region}-bastion-iam-role-${var.env}"
   iam_ssm_policy_name         = "${var.prefix}-${var.region}-bastion-ssm-iam-policy-${var.env}"
   iam_role_secret_policy_name = "${var.prefix}-${var.region}-bastion-secret-iam-policy-${var.env}"
-  iam_role_lb_name            = "${var.prefix}-${var.region}-bastion-lb-iam-policy-${var.env}"
+  iam_role_general_name       = "${var.prefix}-${var.region}-bastion-general-iam-policy-${var.env}"
   iam_profile_name            = "${var.prefix}-${var.region}-bastion-instance-profile-${var.env}"
   sg_name                     = "${var.prefix}-${var.region}-bastion-sg-${var.env}"
   key_name                    = "${var.prefix}-${var.region}-bastion-key-pair-${var.env}"
@@ -100,23 +100,47 @@ resource "aws_iam_role_policy_attachment" "attach_secret_policy" {
   policy_arn = aws_iam_policy.iam_create_secret_policy.arn
 }
 
-resource "aws_iam_policy" "ec2_lb_policy" {
-  name = local.iam_role_lb_name
+resource "aws_iam_policy" "ec2_general_policy" {
+  name = local.iam_role_general_name
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
+        Sid      = "DescribeLB",
         Action   = "elasticloadbalancing:DescribeLoadBalancers",
         Effect   = "Allow",
+        Resource = "*"
+      },
+      {
+        Sid      = "ECRLogin",
+        Effect   = "Allow",
+        Action   = "ecr:GetAuthorizationToken",
+        Resource = "*"
+      },
+      {
+        Sid      = "UpdateRoute53",
+        Effect   = "Allow",
+        Action   = "route53:ChangeResourceRecordSets",
+        Resource = "*"
+      },
+      {
+        Sid    = "GetAndListRoute53",
+        Effect = "Allow",
+        Action = [
+          "route53:GetChange",
+          "route53:ListHostedZones",
+          "route53:ListResourceRecordSets",
+          "route53:ListHostedZonesByName"
+        ],
         Resource = "*"
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "attach_lb_policy_to_ec2" {
+resource "aws_iam_role_policy_attachment" "attach_general_policy_to_ec2" {
   role       = aws_iam_role.bastion_role.name
-  policy_arn = aws_iam_policy.ec2_lb_policy.arn
+  policy_arn = aws_iam_policy.ec2_general_policy.arn
 }
 
 resource "aws_iam_instance_profile" "bastion_profile" {

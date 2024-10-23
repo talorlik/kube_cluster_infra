@@ -330,7 +330,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Resource = "*"
       },
       {
-        Sid    = "ReadSpecificSecret",
+        Sid    = "ReadSecrets",
         Effect = "Allow",
         Action = [
           "secretsmanager:GetSecretValue",

@@ -145,6 +145,7 @@ jobs:
         run: |
           terraform plan \
             -var-file="region.${{ env.AWS_REGION }}.tfvars" \
+            -var "aws_account=${{ inputs.account }}" \
             -var "env=${{ inputs.environment }}" \
             -var "region=${{ env.AWS_REGION }}" \
             -var "country=${{ needs.SetGlobals.outputs.country }}" \

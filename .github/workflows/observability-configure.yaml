@@ -3,13 +3,6 @@ name: Observability Install and Configure
 on:
   workflow_dispatch:
     inputs:
-      account:
-        description: 'Select AWS Account'
-        required: true
-        type: choice
-        default: '019273956931'
-        options:
-          - '019273956931'
       region:
         description: 'Select AWS Region'
         required: true
@@ -298,6 +291,12 @@ jobs:
             helm update
             helm install node-exporter prometheus-community/prometheus-node-exporter -n observability
 
+            # Install Prometheus for metrics storage and scraping
+            helm install prometheus prometheus-community/prometheus -n observability \
+            --set server.persistentVolume.enabled=true \
+            --set server.persistentVolume.size=10Gi \
+            --set server.retention=5d
+
             # Install OpenTelemetry Collector for collecting logs, metrics, and traces
             helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
             helm update
@@ -425,14 +424,6 @@ jobs:
 
             helm install otel-collector open-telemetry/opentelemetry-collector -n observability \
             --values $HOME/kubernetes/otel-collector-config.yaml  # OpenTelemetry config
-
-            # Install Prometheus for metrics storage and scraping
-            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-            helm update
-            helm install prometheus prometheus-community/prometheus -n observability \
-            --set server.persistentVolume.enabled=true \
-            --set server.persistentVolume.size=10Gi \
-            --set server.retention=5d
 
             tee $HOME/kubernetes/grafana-values.yaml <<GRAF_EOF > /dev/null
             datasources:

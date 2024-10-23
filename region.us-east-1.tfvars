@@ -1,9 +1,8 @@
 ### General ###
-env            = "prod"
-prefix         = "talo-tf"
-resource_alias = "talo"
+env    = "prod"
+prefix = "talo-tf"
 ### VPC ###
-vpc_cidr = "10.0.0.0/16"
+vpc_cidr    = "10.0.0.0/16"
 ### Control Plane IAM Role ###
 cp_iam_role_name             = "cp-role"
 cp_iam_role_policy_name      = "cp-policy"
