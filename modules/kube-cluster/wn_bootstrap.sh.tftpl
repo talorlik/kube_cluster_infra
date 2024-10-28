@@ -141,7 +141,7 @@ sudo tee /opt/aws/amazon-cloudwatch-agent/bin/config.json <<EOF > /dev/null
     },
     "aggregation_dimensions": [["InstanceId"]],
     "append_dimensions": {
-      "AutoScalingGroupName": "${aws:AutoScalingGroupName}"
+      "AutoScalingGroupName": "$${aws:AutoScalingGroupName}"
     }
   }
 }
