@@ -89,7 +89,7 @@ jobs:
       - name: Download Output JSON file
         uses: actions/download-artifact@v4
         with:
-          name: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          name: "${{ inputs.environment }}-kube-cluster-outputs.json"
           github-token: "${{ secrets.GH_TOKEN }}"
           repository: talorlik/kube_cluster_infra
           run-id: ${{ needs.GetRunId.outputs.run_id }}
@@ -97,7 +97,7 @@ jobs:
       - name: Extract outputs from file and set as environment variables
         id: set_values
         env:
-          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          ARTIFACT_NAME: "${{ inputs.environment }}-kube-cluster-outputs.json"
         run: |
           echo "kube_config_secret_name=$(jq -r '.kube_config_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
           echo "lambda_name=$(jq -r '.lambda_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT

@@ -21,12 +21,12 @@ on:
           - dev
 
 jobs:
-  GetRunId:
+  GetKubeClusterRunId:
     runs-on: ubuntu-latest
     outputs:
       run_id: ${{ steps.set_run_id.outputs.run_id }}
     steps:
-      - name: Check and Install curl
+      - name: Check and install curl
         run: |
           if ! command -v curl &> /dev/null
           then
@@ -37,7 +37,7 @@ jobs:
             echo "curl is already installed."
           fi
 
-      - name: Check and Install jq
+      - name: Check and install jq
         run: |
           if ! command -v jq &> /dev/null
           then
@@ -48,7 +48,7 @@ jobs:
             echo "jq is already installed."
           fi
 
-      - name: Fetch the latest successful workflow run ID from the Infra Deployment
+      - name: Fetch the latest successful workflow run ID from the infra deployment
         id: set_run_id
         run: |
           LATEST_SUCCESS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
@@ -60,14 +60,64 @@ jobs:
 
           echo "The latest successful run ID is $LATEST_SUCCESS"
 
+  GetAuxInfraRunId:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.set_run_id.outputs.run_id }}
+    steps:
+      - name: Check and install curl
+        run: |
+          if ! command -v curl &> /dev/null
+          then
+            echo "curl could not be found. Installing curl..."
+            sudo apt-get update
+            sudo apt-get install -y curl
+          else
+            echo "curl is already installed."
+          fi
+
+      - name: Check and install jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+            echo "jq could not be found. Installing jq..."
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "jq is already installed."
+          fi
+
+      - name: Fetch the latest successful workflow run ID from the infra deployment
+        id: set_run_id
+        run: |
+          LATEST_SUCCESS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/talorlik/polybot_yolo5_aux_infra/actions/workflows/infra-provisioning-region.yaml/runs?status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id')
+
+          echo "run_id=$LATEST_SUCCESS" >> $GITHUB_OUTPUT
+
+          echo "The latest successful run ID is $LATEST_SUCCESS"
+
   SetGlobals:
     runs-on: ubuntu-latest
     needs:
-      - GetRunId
+      - GetKubeClusterRunId
+      - GetAuxInfraRunId
     outputs:
       region_code: ${{ steps.set_region.outputs.region_code }}
-      bastion_pem_file_name: ${{ steps.set_values.outputs.bastion_pem_file_name }}
-      bastion_public_ip: ${{ steps.set_values.outputs.bastion_public_ip }}
+      aws_account: ${{ steps.set_kube_values.outputs.aws_account }}
+      ecr_repository_url: ${{ steps.set_kube_values.outputs.ecr_repository_url }}
+      telegram_app_url: ${{ steps.set_kube_values.outputs.telegram_app_url }}
+      sub_domain_secret: ${{ steps.set_kube_values.outputs.sub_domain_secret }}
+      telegram_secret: ${{ steps.set_aux_infra_values.outputs.telegram_secret }}
+      sqs_queue_identify: ${{ steps.set_aux_infra_values.outputs.sqs_queue_identify }}
+      sqs_queue_results: ${{ steps.set_aux_infra_values.outputs.sqs_queue_results }}
+      bucket_name: ${{ steps.set_aux_infra_values.outputs.bucket_name }}
+      bucket_prefix: ${{ steps.set_aux_infra_values.outputs.bucket_prefix }}
+      table_name: ${{ steps.set_aux_infra_values.outputs.table_name }}
+      bastion_pem_file_name: ${{ steps.set_kube_values.outputs.bastion_pem_file_name }}
+      bastion_public_ip: ${{ steps.set_kube_values.outputs.bastion_public_ip }}
     steps:
       - name: Check and Install jq
         run: |
@@ -86,32 +136,66 @@ jobs:
           SELECTED_REGION="${{ inputs.region }}"
           echo "region_code=${SELECTED_REGION%%:*}" >> $GITHUB_OUTPUT
 
-      - name: Download Output JSON file
+      - name: Download Kube outputs file
         uses: actions/download-artifact@v4
         with:
-          name: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          name: "${{ inputs.environment }}-kube-cluster-outputs.json"
           github-token: "${{ secrets.GH_TOKEN }}"
           repository: talorlik/kube_cluster_infra
-          run-id: ${{ needs.GetRunId.outputs.run_id }}
+          run-id: ${{ needs.GetKubeClusterRunId.outputs.run_id }}
 
-      - name: Extract outputs from file and set as environment variables
-        id: set_values
+      - name: Download Aux Infra outputs file
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-aux-infra-tf-outputs.json"
+          github-token: ${{ secrets.GH_TOKEN }}
+          repository: talorlik/polybot_yolo5_aux_infra
+          run-id: ${{ needs.GetAuxInfraRunId.outputs.run_id }}
+
+      - name: Extract outputs from Kube file and set as environment variables
+        id: set_kube_values
         env:
-          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-kube-cluster-outputs.json"
+          ARTIFACT_NAME: "${{ inputs.environment }}-kube-cluster-outputs.json"
         run: |
+          echo "aws_account=$(jq -r '.aws_account.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "ecr_repository_url=$(jq -r '.ecr_repository_url.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "telegram_app_url=https://$(jq -r '.common_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "sub_domain_secret=$(jq -r '.sub_domain_cert_body_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
           echo "bastion_pem_file_name=$(jq -r '.bastion_pem_file_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
-
           echo "bastion_public_ip=$(jq -r '.bastion_public_ip.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+
+      - name: Extract outputs from Aux Infra file and set as environment variables
+        id: set_aux_infra_values
+        env:
+          ARTIFACT_NAME: "${{ steps.set_region.outputs.region_code }}-${{ inputs.environment }}-aux-infra-tf-outputs.json"
+        run: |
+          echo "telegram_secret=$(jq -r '.telegram_secret_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "sqs_queue_identify=$(jq -r '.identify_queue_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "sqs_queue_results=$(jq -r '.results_queue_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "bucket_name=$(jq -r '.s3_bucket_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "bucket_prefix=$(jq -r '.s3_bucket_prefix.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
+          echo "table_name=$(jq -r '.table_name.value' ${{ github.workspace }}/${{ env.ARTIFACT_NAME }})" >> $GITHUB_OUTPUT
 
   Configure:
     runs-on: ubuntu-latest
     needs:
-      - GetRunId
+      - GetKubeClusterRunId
       - SetGlobals
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: ${{ needs.SetGlobals.outputs.region_code }}
+      AWS_DEFAULT_REGION: ${{ needs.SetGlobals.outputs.region_code }}
+      ECR_REPOSITORY_URL: ${{ needs.SetGlobals.outputs.ecr_repository_url }}
+      POLYBOT_IMAGE_PLUS_TAG: "polybot-v2-${{ github.run_number }}"
+      YOLO5_IMAGE_PLUS_TAG: "yolo5-v2-${{ github.run_number }}"
+      TELEGRAM_APP_URL: ${{ needs.SetGlobals.outputs.telegram_app_url }}
+      TELEGRAM_SECRET: ${{ needs.SetGlobals.outputs.telegram_secret }}
+      SUB_DOMAIN_SECRET: ${{ needs.SetGlobals.outputs.sub_domain_secret }}
+      SQS_QUEUE_IDENTIFY: ${{ needs.SetGlobals.outputs.sqs_queue_identify }}
+      SQS_QUEUE_RESULTS: ${{ needs.SetGlobals.outputs.sqs_queue_results }}
+      BUCKET_NAME: ${{ needs.SetGlobals.outputs.bucket_name }}
+      BUCKET_PREFIX: ${{ needs.SetGlobals.outputs.bucket_prefix }}
+      TABLE_NAME: ${{ needs.SetGlobals.outputs.table_name }}
       LOCAL_PATH: /home/runner/.ssh
       BASTION_PEM_FILE_NAME: ${{ needs.SetGlobals.outputs.bastion_pem_file_name }}
       BASTION_PUBLIC_IP: ${{ needs.SetGlobals.outputs.bastion_public_ip }}
@@ -122,7 +206,7 @@ jobs:
           name: "${{ env.BASTION_PEM_FILE_NAME }}"
           github-token: "${{ secrets.GH_TOKEN }}"
           repository: talorlik/kube_cluster_infra
-          run-id: ${{ needs.GetRunId.outputs.run_id }}
+          run-id: ${{ needs.GetKubeClusterRunId.outputs.run_id }}
           path: "${{ env.LOCAL_PATH }}"
 
       - name: Set permissions for SSH key and directory
