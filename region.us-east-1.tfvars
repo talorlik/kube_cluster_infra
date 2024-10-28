@@ -1,4 +1,5 @@
 ### General ###
+aws_account = "019273956931"
 env    = "prod"
 prefix = "talo-tf"
 ### VPC ###
@@ -147,11 +148,11 @@ wn_instance_type = "t3.medium"
 sns_protocol     = "email"
 sns_endpoint     = "talorlik@gmail.com"
 ### Secrets ###
-sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v8b"
-sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v8b"
-join_secret_name                 = "kubeadm/join-details/v8b"
-kube_config_secret_name          = "kube/config/v8b"
-kube_dashboard_token_secret_name = "kube/dashboard-token/v8b"
+sub_domain_cert_body_secret_name = "sub-domain/certificate-body/v8c"
+sub_domain_cert_key_secret_name  = "sub-domain/certificate-key/v8c"
+join_secret_name                 = "kubeadm/join-details/v8c"
+kube_config_secret_name          = "kube/config/v8c"
+kube_dashboard_token_secret_name = "kube/dashboard-token/v8c"
 ### ECR ###
 ecr_name             = "docker-images"
 image_tag_mutability = "IMMUTABLE"
